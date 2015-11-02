@@ -6,7 +6,7 @@ import com.tristanpenman.chordial.core.Node
 import com.tristanpenman.chordial.core.NodeProtocol._
 
 class Daemon extends Actor with ActorLogging {
-  private val node = context.actorOf(Props(classOf[Node]))
+  private val node = context.actorOf(Props(classOf[Node], 0L))
 
   node ! Hello
 
