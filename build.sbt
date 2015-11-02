@@ -8,6 +8,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val akkaVersion = "2.3.11"
+lazy val sprayVersion = "1.3.3"
 
 lazy val core = project.in(file("modules/core"))
   .settings(name := "chordial-core")
@@ -21,5 +22,7 @@ lazy val daemon = project.in(file("modules/daemon"))
   .settings(name := "chordial-daemon")
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-remote" % akkaVersion
+    "com.typesafe.akka" %% "akka-remote" % akkaVersion,
+    "io.spray" %% "spray-can" % sprayVersion,
+    "io.spray" %% "spray-routing" % sprayVersion
   ))
