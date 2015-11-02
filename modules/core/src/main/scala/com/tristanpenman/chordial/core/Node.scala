@@ -21,10 +21,6 @@ object NodeProtocol {
 
   case class GetSuccessorOk(successorId: Long, successorRef: ActorRef)
 
-  case class Hello()
-
-  case class HelloResponse()
-
   case class Join(seed: Option[ActorRef])
 
   case class JoinOk()
@@ -90,9 +86,6 @@ class Node(ownId: Long) extends Actor with ActorLogging {
 
     case GetSuccessor =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
-
-    case Hello =>
-      sender() ! HelloResponse
 
     case Join(seed) =>
       sender() ! JoinError("Not implemented")
