@@ -89,6 +89,16 @@ class Node(ownId: Long) extends Actor with ActorLogging {
     ()
   }
 
+  /**
+   * Returns true if the current predecessor should be replaced with the candidate node
+   */
+  private def shouldUpdatePredecessor(currentPred: Option[NodeInfo], candidateId: Long, candidateRef: ActorRef) = {
+    currentPred match {
+      case Some(pred) => Interval(pred.id + 1, ownId).contains(candidateId)
+      case None => true
+    }
+  }
+
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo], stabilising: Boolean): Receive = {
     case BeginStabilisation() =>
       if (!stabilising) {
@@ -109,6 +119,11 @@ class Node(ownId: Long) extends Actor with ActorLogging {
 
     case Join(seed) =>
       sender() ! JoinError("Not implemented")
+
+    case NotifySuccessor(candidateId: Long, candidateRef: ActorRef) =>
+      if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
+        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), stabilising))
+      }
 
     case StabilisationComplete(successorId: Long, successorRef: ActorRef) =>
       successorRef ! NotifySuccessor(ownId, self)
