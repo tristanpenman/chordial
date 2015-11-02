@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.core
 import akka.actor._
 import akka.pattern.ask
 import akka.pattern.pipe
+import com.tristanpenman.chordial.core.shared.Interval
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -56,17 +57,25 @@ class Node(ownId: Long) extends Actor with ActorLogging {
   /** Schedule periodic stabilisation */
   context.system.scheduler.schedule(stabilisationInterval, stabilisationInterval, self, BeginStabilisation())
 
+  /**
+   * Send a GetPredecessor request to the current node's closest known successor, and verify that the current node is
+   * returned as its predecessor. If another node has joined the network and is located between the current node and
+   * its closest known successor, that node should be recorded as the new closest known successor.
+   *
+   * @param successor NodeInfo for the closest known successor
+   */
   private def stabilise(successor: NodeInfo) = {
     successor.ref.ask(GetPredecessor())(stabilisationTimeout)
       .mapTo[GetPredecessorResponse]
-      .map({
-        case GetPredecessorOk(predecessorId: Long, predecessorRef: ActorRef) =>
-          UpdateSuccessor(successor.id, successor.ref)
+      .map {
+        case GetPredecessorOk(predId: Long, predRef: ActorRef) if Interval(ownId + 1, successor.id).contains(predId) =>
+          UpdateSuccessor(predId, predRef)
         case GetPredecessorOkButUnknown() =>
           UpdateSuccessor(successor.id, successor.ref)
-      })
-      .recover({ case _ => StabilisationFailed() })
+      }
+      .recover { case _ => StabilisationFailed() }
       .pipeTo(self)
+    ()
   }
 
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo], stabilising: Boolean): Receive = {
