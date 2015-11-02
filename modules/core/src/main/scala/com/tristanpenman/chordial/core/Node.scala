@@ -18,15 +18,19 @@ object NodeProtocol {
 
   case class GetPredecessorOkButUnknown() extends GetPredecessorResponse
 
+  class GetSuccessorResponse
+
   case class GetSuccessor()
 
-  case class GetSuccessorOk(successorId: Long, successorRef: ActorRef)
+  case class GetSuccessorOk(successorId: Long, successorRef: ActorRef) extends GetSuccessorResponse
+
+  class JoinResponse
 
   case class Join(seed: Option[ActorRef])
 
-  case class JoinOk()
+  case class JoinOk() extends JoinResponse
 
-  case class JoinError(message: String)
+  case class JoinError(message: String) extends JoinResponse
 
 }
 
@@ -43,15 +47,22 @@ class Node(ownId: Long) extends Actor with ActorLogging {
     def apply(nodeId: Long, nodeRef: ActorRef) = new NodeInfo(nodeId, nodeRef)
   }
 
+  /** Internal signal to trigger stabilisation, fired at a regular interval */
   private case class BeginStabilisation()
 
-  private case class StabilisationFailed()
+  /** Message sent to another node to let it know that it is the closest known successor for the specified node */
+  private case class NotifySuccessor(nodeId: Long, nodeRef: ActorRef)
 
-  private case class UpdateSuccessor(successorId: Long, successorRef: ActorRef)
+  /** Internal signal to indicate that stabilisation has finished, with details for the closest known successor */
+  private case class StabilisationComplete(successorId: Long, successorRef: ActorRef)
+
+  /** Internal signal to indicate that stabilisation failed */
+  private case class StabilisationFailed()
 
   /** Time to wait between stabilisation attempts */
   private val stabilisationInterval = Duration(2000, MILLISECONDS)
 
+  /** Time to wait for a GetPredecessor response during stabilisation */
   private val stabilisationTimeout = Duration(5000, MILLISECONDS)
 
   /** Schedule periodic stabilisation */
@@ -64,14 +75,14 @@ class Node(ownId: Long) extends Actor with ActorLogging {
    *
    * @param successor NodeInfo for the closest known successor
    */
-  private def stabilise(successor: NodeInfo) = {
+  private def stabilise(successor: NodeInfo): Unit = {
     successor.ref.ask(GetPredecessor())(stabilisationTimeout)
       .mapTo[GetPredecessorResponse]
       .map {
         case GetPredecessorOk(predId: Long, predRef: ActorRef) if Interval(ownId + 1, successor.id).contains(predId) =>
-          UpdateSuccessor(predId, predRef)
+          StabilisationComplete(predId, predRef)
         case GetPredecessorOkButUnknown() =>
-          UpdateSuccessor(successor.id, successor.ref)
+          StabilisationComplete(successor.id, successor.ref)
       }
       .recover { case _ => StabilisationFailed() }
       .pipeTo(self)
@@ -99,8 +110,12 @@ class Node(ownId: Long) extends Actor with ActorLogging {
     case Join(seed) =>
       sender() ! JoinError("Not implemented")
 
-    case UpdateSuccessor(successorId: Long, successorRef: ActorRef) =>
+    case StabilisationComplete(successorId: Long, successorRef: ActorRef) =>
+      successorRef ! NotifySuccessor(ownId, self)
       context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilising = false))
+
+    case StabilisationFailed =>
+      context.become(receiveWhileReady(successor, predecessor, stabilising = false))
   }
 
   override def receive = receiveWhileReady(NodeInfo(ownId, self), None, stabilising = false)
