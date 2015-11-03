@@ -7,7 +7,7 @@ import spray.http.MediaTypes._
 import spray.httpx.marshalling.ToResponseMarshallable
 import spray.routing._
 
-import com.tristanpenman.chordial.core.NodeProtocol.{GetSuccessor, GetSuccessorOk}
+import com.tristanpenman.chordial.core.NodeProtocol.{GetSuccessorResponse, GetSuccessor, GetSuccessorOk}
 
 import scala.concurrent.duration._
 
@@ -31,11 +31,14 @@ trait Service extends HttpService {
     get {
       respondWithMediaType(`text/plain`) {
         complete {
-          val future = ref ? GetSuccessor
-          ref ? GetSuccessor map {
-            case GetSuccessorOk(id, _) => id.toString
-            case _ => "unknown"
-          }
+          ToResponseMarshallable.isMarshallable(
+            ref.ask(GetSuccessor())
+              .mapTo[GetSuccessorResponse]
+              .map {
+                case GetSuccessorOk(id, _) => id.toString
+                case _ => "unknown"
+              }
+          )
         }
       }
     }
