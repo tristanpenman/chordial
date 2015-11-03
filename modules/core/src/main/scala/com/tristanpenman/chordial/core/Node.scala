@@ -81,7 +81,7 @@ class Node(ownId: Long) extends Actor with ActorLogging {
       .map {
         case GetPredecessorOk(predId: Long, predRef: ActorRef) if Interval(ownId + 1, successor.id).contains(predId) =>
           StabilisationComplete(predId, predRef)
-        case GetPredecessorOkButUnknown() =>
+        case _ =>
           StabilisationComplete(successor.id, successor.ref)
       }
       .recover { case _ => StabilisationFailed() }
@@ -106,7 +106,7 @@ class Node(ownId: Long) extends Actor with ActorLogging {
         stabilise(successor)
       }
 
-    case GetPredecessor =>
+    case GetPredecessor() =>
       predecessor match {
         case Some(info) =>
           sender() ! GetPredecessorOk(info.id, info.ref)
@@ -114,7 +114,7 @@ class Node(ownId: Long) extends Actor with ActorLogging {
           sender() ! GetPredecessorOkButUnknown()
       }
 
-    case GetSuccessor =>
+    case GetSuccessor() =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
 
     case Join(seed) =>
@@ -126,10 +126,10 @@ class Node(ownId: Long) extends Actor with ActorLogging {
       }
 
     case StabilisationComplete(successorId: Long, successorRef: ActorRef) =>
-      successorRef ! NotifySuccessor(ownId, self)
       context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilising = false))
+      successorRef ! NotifySuccessor(ownId, self)
 
-    case StabilisationFailed =>
+    case StabilisationFailed() =>
       context.become(receiveWhileReady(successor, predecessor, stabilising = false))
   }
 
