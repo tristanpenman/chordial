@@ -8,6 +8,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val akkaVersion = "2.3.11"
+lazy val scalatestVersion = "2.2.4"
 lazy val sprayVersion = "1.3.3"
 
 lazy val core = project.in(file("modules/core"))
@@ -24,5 +25,7 @@ lazy val daemon = project.in(file("modules/daemon"))
   .settings(libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-remote" % akkaVersion,
     "io.spray" %% "spray-can" % sprayVersion,
-    "io.spray" %% "spray-routing" % sprayVersion
+    "io.spray" %% "spray-routing" % sprayVersion,
+    "io.spray" %% "spray-testkit" % sprayVersion % "test",
+    "org.scalatest" %% "scalatest" % scalatestVersion % "test"
   ))
