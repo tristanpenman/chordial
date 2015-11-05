@@ -6,6 +6,7 @@ import akka.pattern.pipe
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.shared.Interval
 
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
@@ -19,6 +20,12 @@ object NodeProtocol {
     extends ClosestPrecedingFingerResponse
 
   case class ClosestPrecedingFingerError(queryId: Long, message: String) extends ClosestPrecedingFingerResponse
+
+  class GetIdResponse
+
+  case class GetId()
+
+  case class GetIdOk(id: Long) extends GetIdResponse
 
   class GetPredecessorResponse
 
@@ -36,7 +43,7 @@ object NodeProtocol {
 
   class JoinResponse
 
-  case class Join(seed: Option[ActorRef])
+  case class Join(seed: ActorRef)
 
   case class JoinOk() extends JoinResponse
 
@@ -74,6 +81,8 @@ class Node(ownId: Long) extends Actor with ActorLogging {
 
   /** Time to wait for a GetPredecessor response during stabilisation */
   private val stabilisationTimeout = Timeout(5000, MILLISECONDS)
+
+  private val joinTimeout = Timeout(5000, MILLISECONDS)
 
   /** Schedule periodic stabilisation */
   context.system.scheduler.schedule(stabilisationInterval, stabilisationInterval, self, BeginStabilisation())
@@ -129,6 +138,9 @@ class Node(ownId: Long) extends Actor with ActorLogging {
         sender() ! ClosestPrecedingFingerOk(queryId, ownId, self)
       }
 
+    case GetId() =>
+      sender() ! GetIdOk(ownId)
+
     case GetPredecessor() =>
       predecessor match {
         case Some(info) =>
@@ -140,8 +152,15 @@ class Node(ownId: Long) extends Actor with ActorLogging {
     case GetSuccessor() =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
 
-    case Join(seed) =>
-      sender() ! JoinError("Not implemented")
+    case Join(seedRef) =>
+      try {
+        val future = seedRef.ask(GetId())
+        val seedId = Await.result(future.mapTo[Long], joinTimeout.duration)
+        context.become(receiveWhileReady(NodeInfo(seedId, seedRef), None, nextStabilisationId, None))
+        sender() ! JoinOk()
+      } catch {
+        case t: Throwable => sender() ! JoinError(t.getMessage)
+      }
 
     case NotifySuccessor(candidateId: Long, candidateRef: ActorRef) =>
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
