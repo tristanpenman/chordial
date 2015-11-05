@@ -7,7 +7,7 @@ lazy val commonSettings = Seq(
   scalacOptions := Seq("-feature", "-unchecked", "-deprecation")
 )
 
-lazy val akkaVersion = "2.3.11"
+lazy val akkaVersion = "2.3.14"
 lazy val scalatestVersion = "2.2.4"
 lazy val sprayVersion = "1.3.3"
 
@@ -15,7 +15,9 @@ lazy val core = project.in(file("modules/core"))
   .settings(name := "chordial-core")
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-actor" % akkaVersion
+    "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+    "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
+    "org.scalatest" %% "scalatest" % scalatestVersion % "test"
   ))
 
 lazy val daemon = project.in(file("modules/daemon"))
@@ -29,3 +31,4 @@ lazy val daemon = project.in(file("modules/daemon"))
     "io.spray" %% "spray-testkit" % sprayVersion % "test",
     "org.scalatest" %% "scalatest" % scalatestVersion % "test"
   ))
+
