@@ -63,7 +63,7 @@ class Node(ownId: Long) extends Actor with ActorLogging {
   private val stabilisationInterval = Duration(2000, MILLISECONDS)
 
   /** Time to wait for a GetPredecessor response during stabilisation */
-  private val stabilisationTimeout = Duration(5000, MILLISECONDS)
+  private val stabilisationTimeout = Timeout(5000, MILLISECONDS)
 
   /** Schedule periodic stabilisation */
   context.system.scheduler.schedule(stabilisationInterval, stabilisationInterval, self, BeginStabilisation())
