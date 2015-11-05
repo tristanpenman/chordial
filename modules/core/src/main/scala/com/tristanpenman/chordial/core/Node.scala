@@ -11,6 +11,15 @@ import scala.concurrent.duration._
 
 object NodeProtocol {
 
+  class ClosestPrecedingFingerResponse
+
+  case class ClosestPrecedingFinger(queryId: Long)
+
+  case class ClosestPrecedingFingerOk(queryId: Long, nodeId: Long, nodeRef: ActorRef)
+    extends ClosestPrecedingFingerResponse
+
+  case class ClosestPrecedingFingerError(queryId: Long, message: String) extends ClosestPrecedingFingerResponse
+
   class GetPredecessorResponse
 
   case class GetPredecessor()
@@ -107,6 +116,17 @@ class Node(ownId: Long) extends Actor with ActorLogging {
         context.become(receiveWhileReady(successor, predecessor, nextStabilisationId + 1,
           Some(nextStabilisationId)))
         stabilise(nextStabilisationId, successor)
+      }
+
+    case ClosestPrecedingFinger(queryId) =>
+      // Simplified version of the closest-preceding-finger algorithm that does not use a finger table. We first check
+      // whether the closest known successor lies in the interval beginning immediately after the current node and
+      // ending immediately before the query ID - this corresponds to the case where the successor node is the current
+      // node's closest known predecessor for the query ID. Otherwise, the current node is the closest predecessor.
+      if (Interval(ownId + 1, queryId).contains(successor.id)) {
+        sender() ! ClosestPrecedingFingerOk(queryId, successor.id, successor.ref)
+      } else {
+        sender() ! ClosestPrecedingFingerOk(queryId, ownId, self)
       }
 
     case GetPredecessor() =>
