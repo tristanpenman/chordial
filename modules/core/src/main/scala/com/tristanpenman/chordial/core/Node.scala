@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.core
 import akka.actor._
 import akka.pattern.ask
 import akka.pattern.pipe
+import akka.util.Timeout
 import com.tristanpenman.chordial.core.shared.Interval
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -54,10 +55,10 @@ class Node(ownId: Long) extends Actor with ActorLogging {
   private case class NotifySuccessor(nodeId: Long, nodeRef: ActorRef)
 
   /** Internal signal to indicate that stabilisation has finished, with details for the closest known successor */
-  private case class StabilisationComplete(successorId: Long, successorRef: ActorRef)
+  private case class StabilisationComplete(stabilisationId: Long, successorId: Long, successorRef: ActorRef)
 
   /** Internal signal to indicate that stabilisation failed */
-  private case class StabilisationFailed()
+  private case class StabilisationFailed(stabilisationId: Long)
 
   /** Time to wait between stabilisation attempts */
   private val stabilisationInterval = Duration(2000, MILLISECONDS)
@@ -75,16 +76,16 @@ class Node(ownId: Long) extends Actor with ActorLogging {
    *
    * @param successor NodeInfo for the closest known successor
    */
-  private def stabilise(successor: NodeInfo): Unit = {
+  private def stabilise(stabilisationId: Long, successor: NodeInfo): Unit = {
     successor.ref.ask(GetPredecessor())(stabilisationTimeout)
       .mapTo[GetPredecessorResponse]
       .map {
         case GetPredecessorOk(predId: Long, predRef: ActorRef) if Interval(ownId + 1, successor.id).contains(predId) =>
-          StabilisationComplete(predId, predRef)
+          StabilisationComplete(stabilisationId, predId, predRef)
         case _ =>
-          StabilisationComplete(successor.id, successor.ref)
+          StabilisationComplete(stabilisationId, successor.id, successor.ref)
       }
-      .recover { case _ => StabilisationFailed() }
+      .recover { case _ => StabilisationFailed(stabilisationId) }
       .pipeTo(self)
     ()
   }
@@ -99,11 +100,13 @@ class Node(ownId: Long) extends Actor with ActorLogging {
     }
   }
 
-  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo], stabilising: Boolean): Receive = {
+  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo],
+                                nextStabilisationId: Long, pendingStabilisationId: Option[Long]): Receive = {
     case BeginStabilisation() =>
-      if (!stabilising) {
-        context.become(receiveWhileReady(successor, predecessor, stabilising = true))
-        stabilise(successor)
+      if (pendingStabilisationId.isEmpty) {
+        context.become(receiveWhileReady(successor, predecessor, nextStabilisationId + 1,
+          Some(nextStabilisationId)))
+        stabilise(nextStabilisationId, successor)
       }
 
     case GetPredecessor() =>
@@ -122,16 +125,25 @@ class Node(ownId: Long) extends Actor with ActorLogging {
 
     case NotifySuccessor(candidateId: Long, candidateRef: ActorRef) =>
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
-        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), stabilising))
+        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), nextStabilisationId,
+          pendingStabilisationId))
       }
 
-    case StabilisationComplete(successorId: Long, successorRef: ActorRef) =>
-      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilising = false))
-      successorRef ! NotifySuccessor(ownId, self)
+    case StabilisationComplete(stabilisationId: Long, successorId: Long, successorRef: ActorRef) =>
+      pendingStabilisationId.foreach(expectedStabilisationId => {
+        if (expectedStabilisationId == stabilisationId) {
+          context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, nextStabilisationId, None))
+          successorRef ! NotifySuccessor(ownId, self)
+        }
+      })
 
-    case StabilisationFailed() =>
-      context.become(receiveWhileReady(successor, predecessor, stabilising = false))
+    case StabilisationFailed(stabilisationId: Long) =>
+      pendingStabilisationId.foreach(expectedStabilisationId => {
+        if (expectedStabilisationId == stabilisationId) {
+          context.become(receiveWhileReady(successor, predecessor, nextStabilisationId, None))
+        }
+      })
   }
 
-  override def receive = receiveWhileReady(NodeInfo(ownId, self), None, stabilising = false)
+  override def receive = receiveWhileReady(NodeInfo(ownId, self), None, 0, None)
 }
