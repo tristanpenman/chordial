@@ -16,14 +16,20 @@ trait Service extends HttpService {
 
   implicit val timeout: Timeout = 3.seconds
 
-  protected def id: Long
-  protected def ref: ActorRef
+  protected def nodeRef: ActorRef
 
   val routes = path("") {
     get {
       respondWithMediaType(`text/plain`) {
         complete {
-          ToResponseMarshallable.isMarshallable(id.toString)
+          ToResponseMarshallable.isMarshallable(
+            nodeRef.ask(GetId())
+              .mapTo[GetIdResponse]
+              .map {
+                case GetIdOk(id) => id.toString
+                case _ => "unknown"
+              }
+          )
         }
       }
     }
@@ -32,7 +38,7 @@ trait Service extends HttpService {
       respondWithMediaType(`text/plain`) {
         complete {
           ToResponseMarshallable.isMarshallable(
-            ref.ask(GetSuccessor())
+            nodeRef.ask(GetSuccessor())
               .mapTo[GetSuccessorResponse]
               .map {
                 case GetSuccessorOk(id, _) => id.toString
@@ -47,7 +53,7 @@ trait Service extends HttpService {
       respondWithMediaType(`text/plain`) {
         complete {
           ToResponseMarshallable.isMarshallable(
-            ref.ask(GetPredecessor())
+            nodeRef.ask(GetPredecessor())
               .mapTo[GetPredecessorResponse]
               .map {
                 case GetPredecessorOk(id, _) => id.toString

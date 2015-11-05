@@ -2,21 +2,21 @@ package com.tristanpenman.chordial.daemon.service
 
 import akka.actor.{Actor, ActorRef}
 import akka.testkit.TestActorRef
-import com.tristanpenman.chordial.core.NodeProtocol.{GetPredecessor, GetPredecessorOk, GetSuccessor, GetSuccessorOk}
+import com.tristanpenman.chordial.core.NodeProtocol._
 import org.scalatest.{FlatSpec, ShouldMatchers}
 import spray.testkit.ScalatestRouteTest
 
 class ServiceSpec extends FlatSpec with ShouldMatchers with Service with ScalatestRouteTest {
   def actorRefFactory = system
 
-  override protected def id: Long = 0
-
-  override protected def ref: ActorRef = TestActorRef(new Actor {
+  override protected def nodeRef: ActorRef = TestActorRef(new Actor {
     def receive = {
+      case GetId() =>
+        sender() ! GetIdOk(0L)
       case GetPredecessor() =>
-        sender() ! GetPredecessorOk(-1, self)
+        sender() ! GetPredecessorOk(-1L, self)
       case GetSuccessor() =>
-        sender() ! GetSuccessorOk(1, self)
+        sender() ! GetSuccessorOk(1L, self)
     }
   })
 
