@@ -155,7 +155,11 @@ class Node(ownId: Long) extends Actor with ActorLogging {
     case Join(seedRef) =>
       try {
         val future = seedRef.ask(GetId())(joinTimeout)
-        val seedId = Await.result(future.mapTo[Long], Duration.Inf)
+          .mapTo[GetIdOk]
+          .map {
+            case GetIdOk(id) => id
+          }
+        val seedId = Await.result(future, Duration.Inf)
         context.become(receiveWhileReady(NodeInfo(seedId, seedRef), None, nextStabilisationId, None))
         sender() ! JoinOk()
       } catch {
