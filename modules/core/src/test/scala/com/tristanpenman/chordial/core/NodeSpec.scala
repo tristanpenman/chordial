@@ -1,6 +1,6 @@
 package com.tristanpenman.chordial.core
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import com.tristanpenman.chordial.core.NodeProtocol._
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
@@ -17,7 +17,7 @@ with BeforeAndAfterAll {
   "A Node actor" must {
 
     val ownId = 1L
-    val node = system.actorOf(Props(classOf[Node], ownId))
+    val node = system.actorOf(Node.props(ownId))
 
     "respond to a GetId message with a GetIdOk message containing its ID" in {
       node ! GetId()

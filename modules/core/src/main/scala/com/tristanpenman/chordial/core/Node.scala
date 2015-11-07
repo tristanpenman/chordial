@@ -49,9 +49,23 @@ object NodeProtocol {
 
   case class JoinError(message: String) extends JoinResponse
 
+  class PublishedEvent
+
+  case class PredecessorInitialised(ownId: Long, predecessorId: Long) extends PublishedEvent
+
+  case class PredecessorUpdated(ownId: Long, predecessorId: Long, prevPredecessorId: Option[Long]) extends PublishedEvent
+
+  case class StabilisationStarted(ownId: Long) extends PublishedEvent
+
+  case class StabilisationFinished(ownId: Long, successorId: Long, prevSuccessorId: Long) extends PublishedEvent
+
+  case class StabilisationFinishedWithError(ownId: Long, message: String) extends PublishedEvent
+
+  case class SuccessorNotified(ownId: Long, successorId: Long) extends PublishedEvent
+
 }
 
-class Node(ownId: Long) extends Actor with ActorLogging {
+class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLogging {
 
   import NodeProtocol._
 
@@ -74,7 +88,7 @@ class Node(ownId: Long) extends Actor with ActorLogging {
   private case class StabilisationComplete(stabilisationId: Long, successorId: Long, successorRef: ActorRef)
 
   /** Internal signal to indicate that stabilisation failed */
-  private case class StabilisationFailed(stabilisationId: Long)
+  private case class StabilisationFailed(stabilisationId: Long, message: String)
 
   /** Time to wait between stabilisation attempts */
   private val stabilisationInterval = Duration(2000, MILLISECONDS)
@@ -95,15 +109,19 @@ class Node(ownId: Long) extends Actor with ActorLogging {
    * @param successor NodeInfo for the closest known successor
    */
   private def stabilise(stabilisationId: Long, successor: NodeInfo): Unit = {
+    eventSinks.foreach { _ ! StabilisationStarted(ownId) }
     successor.ref.ask(GetPredecessor())(stabilisationTimeout)
       .mapTo[GetPredecessorResponse]
       .map {
         case GetPredecessorOk(predId: Long, predRef: ActorRef) if Interval(ownId + 1, successor.id).contains(predId) =>
           StabilisationComplete(stabilisationId, predId, predRef)
-        case _ =>
+        case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() =>
           StabilisationComplete(stabilisationId, successor.id, successor.ref)
+        case message =>
+          StabilisationFailed(stabilisationId, s"Received unexpected ${message.getClass.getSimpleName} message from " +
+            "client while waiting for GetPredecessorResponse")
       }
-      .recover { case _ => StabilisationFailed(stabilisationId) }
+      .recover { case e => StabilisationFailed(stabilisationId, e.getMessage) }
       .pipeTo(self)
     ()
   }
@@ -170,23 +188,31 @@ class Node(ownId: Long) extends Actor with ActorLogging {
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
         context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), nextStabilisationId,
           pendingStabilisationId))
+        eventSinks.foreach { _ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)) }
       }
 
     case StabilisationComplete(stabilisationId: Long, successorId: Long, successorRef: ActorRef) =>
       pendingStabilisationId.foreach(expectedStabilisationId => {
         if (expectedStabilisationId == stabilisationId) {
           context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, nextStabilisationId, None))
+          eventSinks.foreach { _ ! StabilisationFinished(ownId, successorId, successor.id) }
           successorRef ! NotifySuccessor(ownId, self)
+          eventSinks.foreach { _ ! SuccessorNotified(ownId, successorId) }
         }
       })
 
-    case StabilisationFailed(stabilisationId: Long) =>
+    case StabilisationFailed(stabilisationId: Long, message: String) =>
       pendingStabilisationId.foreach(expectedStabilisationId => {
         if (expectedStabilisationId == stabilisationId) {
           context.become(receiveWhileReady(successor, predecessor, nextStabilisationId, None))
+          eventSinks.foreach { _ ! StabilisationFinishedWithError(ownId, message) }
         }
       })
   }
 
   override def receive = receiveWhileReady(NodeInfo(ownId, self), None, 0, None)
+}
+
+object Node {
+    def props(ownId: Long, eventSinks: Set[ActorRef] = Set.empty) = Props(new Node(ownId, eventSinks))
 }
