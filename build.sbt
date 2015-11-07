@@ -1,5 +1,8 @@
 name := "Chordial"
 
+// Needs to be included in each build.sbt until Scalastyle is updated to correctly resolve settings
+scalastyleConfig := baseDirectory.value / "project" / "scalastyle_config.xml"
+
 lazy val commonSettings = Seq(
   organization := "com.tristanpenman",
   version := "0.0.1",
@@ -12,7 +15,6 @@ lazy val scalatestVersion = "2.2.4"
 lazy val sprayVersion = "1.3.3"
 
 lazy val core = project.in(file("modules/core"))
-  .settings(name := "chordial-core")
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-actor" % akkaVersion,
@@ -22,7 +24,6 @@ lazy val core = project.in(file("modules/core"))
 
 lazy val daemon = project.in(file("modules/daemon"))
   .dependsOn(core)
-  .settings(name := "chordial-daemon")
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-remote" % akkaVersion,
