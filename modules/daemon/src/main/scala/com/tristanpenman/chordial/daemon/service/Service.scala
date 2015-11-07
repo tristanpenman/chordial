@@ -9,10 +9,11 @@ import spray.routing._
 
 import com.tristanpenman.chordial.core.NodeProtocol._
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
 trait Service extends HttpService {
-  implicit def ec = actorRefFactory.dispatcher
+  implicit def ec: ExecutionContextExecutor = actorRefFactory.dispatcher
 
   implicit val timeout: Timeout = 3.seconds
 

@@ -75,7 +75,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
   }
 
   private object NodeInfo {
-    def apply(nodeId: Long, nodeRef: ActorRef) = new NodeInfo(nodeId, nodeRef)
+    def apply(nodeId: Long, nodeRef: ActorRef): NodeInfo = new NodeInfo(nodeId, nodeRef)
   }
 
   /** Internal signal to trigger stabilisation, fired at a regular interval */
@@ -210,9 +210,9 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       })
   }
 
-  override def receive = receiveWhileReady(NodeInfo(ownId, self), None, 0, None)
+  override def receive: Receive = receiveWhileReady(NodeInfo(ownId, self), None, 0, None)
 }
 
 object Node {
-    def props(ownId: Long, eventSinks: Set[ActorRef] = Set.empty) = Props(new Node(ownId, eventSinks))
+    def props(ownId: Long, eventSinks: Set[ActorRef] = Set.empty): Props = Props(new Node(ownId, eventSinks))
 }
