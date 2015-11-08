@@ -1,9 +1,10 @@
 package com.tristanpenman.chordial.core
 
 import akka.actor._
-import akka.pattern.ask
-import akka.pattern.pipe
+import akka.pattern.{ask, pipe}
 import akka.util.Timeout
+import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm
+import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.shared.Interval
 
 import scala.concurrent.Await
@@ -20,6 +21,15 @@ object NodeProtocol {
     extends ClosestPrecedingFingerResponse
 
   case class ClosestPrecedingFingerError(queryId: Long, message: String) extends ClosestPrecedingFingerResponse
+
+  class FindPredecessorResponse
+
+  case class FindPredecessor(queryId: Long)
+
+  case class FindPredecessorOk(queryId: Long, predecessorId: Long, predecessorRef: ActorRef)
+    extends FindPredecessorResponse
+
+  case class FindPredecessorError(queryId: Long, message: String) extends FindPredecessorResponse
 
   class GetIdResponse
 
@@ -98,6 +108,8 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
 
   private val joinTimeout = Timeout(5000, MILLISECONDS)
 
+  private val findPredecessorTimeout = Timeout(5000, MILLISECONDS)
+
   /** Schedule periodic stabilisation */
   context.system.scheduler.schedule(stabilisationInterval, stabilisationInterval, self, BeginStabilisation())
 
@@ -136,6 +148,36 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
     }
   }
 
+  /**
+   * Create an actor to execute the FindPredecessor algorithm and, when it finishes/fails, produce a response that
+   * will be recognised by the original sender of the request
+   *
+   * This method passes in the ID and ActorRef of the current node as the initial candidate node, which means the
+   * FindPredecessor algorithm will begin its search at the current node.
+   *
+   * The FindPredecessorAlgorithm actor will initiate its own shutdown procedure when it sends either a
+   * FindPredecessorAlgorithmOk or FindPredecessorAlgorithmError message. However, if the future returned by the 'ask'
+   * request does not complete within the timeout period, the FindPredecessorAlgorithm actor must be shutdown
+   * manually to ensure that it does not run indefinitely.
+   */
+  private def findPredecessor(queryId: Long, sender: ActorRef, requestTimeout: Timeout): Unit = {
+    val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props())
+    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmBegin(queryId, ownId, self))(requestTimeout)
+      .mapTo[FindPredecessorAlgorithmResponse]
+      .map {
+        case FindPredecessorAlgorithmOk(predecessorId, predecessorRef) =>
+          FindPredecessorOk(queryId, predecessorId, predecessorRef)
+        case FindPredecessorAlgorithmError(message) =>
+          FindPredecessorError(queryId, message)
+      }
+      .recover {
+        case exception =>
+          context.stop(findPredecessorAlgorithm)
+          FindPredecessorError(queryId, exception.getMessage)
+      }
+      .pipeTo(sender)
+  }
+
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo],
                                 nextStabilisationId: Long, pendingStabilisationId: Option[Long]): Receive = {
     case BeginStabilisation() =>
@@ -155,6 +197,9 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       } else {
         sender() ! ClosestPrecedingFingerOk(queryId, ownId, self)
       }
+
+    case FindPredecessor(queryId: Long) =>
+      findPredecessor(queryId, sender(), findPredecessorTimeout)
 
     case GetId() =>
       sender() ! GetIdOk(ownId)
