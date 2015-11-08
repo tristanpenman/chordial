@@ -55,7 +55,7 @@ object NodeProtocol {
 
   case class Join(seed: ActorRef)
 
-  case class JoinOk() extends JoinResponse
+  case class JoinOk(successorId: Long) extends JoinResponse
 
   case class JoinError(message: String) extends JoinResponse
 
@@ -177,6 +177,29 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       .pipeTo(sender)
   }
 
+  /**
+   * Attempt to join an existing Chord network, blocking until the join is successful or the request timeout period has
+   * elapsed
+   *
+   * This is a simplified version of the join algorithm that simply uses the seed node as the successor, which means
+   * that the only operation we're blocking on is the request for that node's ID. Although we may already have that
+   * information stored locally, this ensures that the node is live.
+   */
+  private def join(seedRef: ActorRef, sender: ActorRef, requestTimeout: Timeout): Option[NodeInfo] =
+    Await.result(seedRef.ask(GetId())(requestTimeout)
+      .mapTo[GetIdOk]
+      .map {
+        case GetIdOk(seedId) =>
+          sender ! JoinOk(seedId)
+          Some(NodeInfo(seedId, seedRef))
+      }
+      .recover {
+        case exception =>
+          sender ! JoinError(exception.getMessage)
+          None
+      },
+      Duration.Inf)
+
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo],
                                 nextStabilisationId: Long, pendingStabilisationId: Option[Long]): Receive = {
     case BeginStabilisation() =>
@@ -215,18 +238,10 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       sender() ! GetSuccessorOk(successor.id, successor.ref)
 
     case Join(seedRef) =>
-      try {
-        val future = seedRef.ask(GetId())(joinTimeout)
-          .mapTo[GetIdOk]
-          .map {
-            case GetIdOk(id) => id
-          }
-        val seedId = Await.result(future, Duration.Inf)
-        context.become(receiveWhileReady(NodeInfo(seedId, seedRef), None, nextStabilisationId, None))
-        sender() ! JoinOk()
-        eventSinks.foreach(_ ! JoinedNetwork(ownId, seedId))
-      } catch {
-        case t: Throwable => sender() ! JoinError(t.getMessage)
+      join(seedRef, sender(), joinTimeout).foreach {
+        case newSuccessor =>
+          context.become(receiveWhileReady(newSuccessor, None, nextStabilisationId, None))
+          eventSinks.foreach(_ ! JoinedNetwork(ownId, newSuccessor.id))
       }
 
     case NotifySuccessor(candidateId: Long, candidateRef: ActorRef) =>
