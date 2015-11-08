@@ -61,6 +61,8 @@ object NodeProtocol {
 
   class PublishedEvent
 
+  case class JoinedNetwork(ownId: Long, seedId: Long) extends PublishedEvent
+
   case class PredecessorInitialised(ownId: Long, predecessorId: Long) extends PublishedEvent
 
   case class PredecessorUpdated(ownId: Long, predecessorId: Long, prevPredecessorId: Option[Long]) extends PublishedEvent
@@ -121,7 +123,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
    * @param successor NodeInfo for the closest known successor
    */
   private def stabilise(stabilisationId: Long, successor: NodeInfo): Unit = {
-    eventSinks.foreach { _ ! StabilisationStarted(ownId) }
+    eventSinks.foreach(_ ! StabilisationStarted(ownId))
     successor.ref.ask(GetPredecessor())(stabilisationTimeout)
       .mapTo[GetPredecessorResponse]
       .map {
@@ -225,6 +227,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
         val seedId = Await.result(future, Duration.Inf)
         context.become(receiveWhileReady(NodeInfo(seedId, seedRef), None, nextStabilisationId, None))
         sender() ! JoinOk()
+        eventSinks.foreach(_ ! JoinedNetwork(ownId, seedId))
       } catch {
         case t: Throwable => sender() ! JoinError(t.getMessage)
       }
@@ -233,16 +236,16 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
         context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), nextStabilisationId,
           pendingStabilisationId))
-        eventSinks.foreach { _ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)) }
+        eventSinks.foreach(_ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)))
       }
 
     case StabilisationComplete(stabilisationId: Long, successorId: Long, successorRef: ActorRef) =>
       pendingStabilisationId.foreach(expectedStabilisationId => {
         if (expectedStabilisationId == stabilisationId) {
           context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, nextStabilisationId, None))
-          eventSinks.foreach { _ ! StabilisationFinished(ownId, successorId, successor.id) }
+          eventSinks.foreach(_ ! StabilisationFinished(ownId, successorId, successor.id))
           successorRef ! NotifySuccessor(ownId, self)
-          eventSinks.foreach { _ ! SuccessorNotified(ownId, successorId) }
+          eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
         }
       })
 
@@ -250,7 +253,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       pendingStabilisationId.foreach(expectedStabilisationId => {
         if (expectedStabilisationId == stabilisationId) {
           context.become(receiveWhileReady(successor, predecessor, nextStabilisationId, None))
-          eventSinks.foreach { _ ! StabilisationFinishedWithError(ownId, message) }
+          eventSinks.foreach(_ ! StabilisationFinishedWithError(ownId, message))
         }
       })
   }
