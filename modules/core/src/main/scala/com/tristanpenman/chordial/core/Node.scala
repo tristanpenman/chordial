@@ -131,9 +131,6 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
           StabilisationComplete(stabilisationId, predId, predRef)
         case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() =>
           StabilisationComplete(stabilisationId, successor.id, successor.ref)
-        case message =>
-          StabilisationFailed(stabilisationId, s"Received unexpected ${message.getClass.getSimpleName} message from " +
-            "client while waiting for GetPredecessorResponse")
       }
       .recover { case e => StabilisationFailed(stabilisationId, e.getMessage) }
       .pipeTo(self)
