@@ -4,7 +4,9 @@ import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm
+import com.tristanpenman.chordial.core.actors._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
+import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
 import com.tristanpenman.chordial.core.shared.Interval
 
 import scala.concurrent.Await
@@ -30,6 +32,15 @@ object NodeProtocol {
     extends FindPredecessorResponse
 
   case class FindPredecessorError(queryId: Long, message: String) extends FindPredecessorResponse
+
+  class FindSuccessorResponse
+
+  case class FindSuccessor(queryId: Long)
+
+  case class FindSuccessorOk(queryId: Long, successorId: Long, successorRef: ActorRef)
+    extends FindSuccessorResponse
+
+  case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
 
   class GetIdResponse
 
@@ -112,6 +123,8 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
 
   private val findPredecessorTimeout = Timeout(5000, MILLISECONDS)
 
+  private val findSuccessorTimeout = Timeout(5000, MILLISECONDS)
+
   /** Schedule periodic stabilisation */
   context.system.scheduler.schedule(stabilisationInterval, stabilisationInterval, self, BeginStabilisation())
 
@@ -178,6 +191,34 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
   }
 
   /**
+   * Create an actor to execute the FindSuccessor algorithm and, when it finishes/fails, produce a response that
+   * will be recognised by the original sender of the request.
+   *
+   * This method passes in the ActorRef of the current node as the search node, which means the operation will be
+   * performed in the context of the current node.
+   */
+  private def findSuccessor(queryId: Long, sender: ActorRef, requestTimeout: Timeout): Unit = {
+    // The FindSuccessorAlgorithm actor will shutdown immediately after it sends a FindSuccessorAlgorithmOk or
+    // FindSuccessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
+    // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
+    val findSuccessorAlgorithm = context.actorOf(FindSuccessorAlgorithm.props())
+    findSuccessorAlgorithm.ask(FindSuccessorAlgorithmBegin(queryId, self))(requestTimeout)
+      .mapTo[FindSuccessorAlgorithmResponse]
+      .map {
+        case FindSuccessorAlgorithmOk(successorId, successorRef) =>
+          FindSuccessorOk(queryId, successorId, successorRef)
+        case FindSuccessorAlgorithmError(message) =>
+          FindSuccessorError(queryId, message)
+      }
+      .recover {
+        case exception =>
+          context.stop(findSuccessorAlgorithm)
+          FindSuccessorError(queryId, exception.getMessage)
+      }
+      .pipeTo(sender)
+  }
+
+  /**
    * Attempt to join an existing Chord network, blocking until the join is successful or the request timeout period has
    * elapsed
    *
@@ -222,6 +263,9 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
 
     case FindPredecessor(queryId: Long) =>
       findPredecessor(queryId, sender(), findPredecessorTimeout)
+
+    case FindSuccessor(queryId: Long) =>
+      findSuccessor(queryId, sender(), findSuccessorTimeout)
 
     case GetId() =>
       sender() ! GetIdOk(ownId)
