@@ -8,18 +8,15 @@ import com.tristanpenman.chordial.core.shared.Interval
  * Actor class that implements the FindPredecessor algorithm
  *
  * The FindPredecessor algorithm is defined in the Chord paper as follows:
-
- *   n.find_predecessor(id)
- *     n' = n;
- *     while (id NOT_IN (n', n'.successor])
- *       n' = n'.closest_preceding_finger(id);
- *     return n';
  *
- * This actor implements this algorithm using the GetSuccessorMonitor and ClosestPrecedingFingerMonitor classes to
- * perform and monitor requests made to other nodes. The main loop is implicitly defined by two contexts, which
- * alternate depending on which kind of monitor we're currently waiting on.
+ * n.find_predecessor(id)
+ *   n' = n;
+ *   while (id NOT_IN (n', n'.successor])
+ *     n' = n'.closest_preceding_finger(id);
+ *   return n';
  *
- * The algorithm will fail if either monitor receives a timeout.
+ * This algorithm has been implemented as a series of alternating 'successor' and 'closest_preceding_finger'
+ * operations, each performed by sending a message to an ActorRef and awaiting an appropriate response.
  *
  * Note that the NOT_IN operator is defined in terms of an interval that wraps around to the minimum value.
  */

@@ -3,7 +3,6 @@ package com.tristanpenman.chordial.core
 import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm
 import com.tristanpenman.chordial.core.actors._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
@@ -166,13 +165,11 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
    *
    * This method passes in the ID and ActorRef of the current node as the initial candidate node, which means the
    * FindPredecessor algorithm will begin its search at the current node.
-   *
-   * The FindPredecessorAlgorithm actor will initiate its own shutdown procedure when it sends either a
-   * FindPredecessorAlgorithmOk or FindPredecessorAlgorithmError message. However, if the future returned by the 'ask'
-   * request does not complete within the timeout period, the FindPredecessorAlgorithm actor must be shutdown
-   * manually to ensure that it does not run indefinitely.
    */
   private def findPredecessor(queryId: Long, sender: ActorRef, requestTimeout: Timeout): Unit = {
+    // The FindPredecessorAlgorithm actor will shutdown immediately after it sends a FindPredecessorAlgorithmOk or
+    // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
+    // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
     val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props())
     findPredecessorAlgorithm.ask(FindPredecessorAlgorithmBegin(queryId, ownId, self))(requestTimeout)
       .mapTo[FindPredecessorAlgorithmResponse]

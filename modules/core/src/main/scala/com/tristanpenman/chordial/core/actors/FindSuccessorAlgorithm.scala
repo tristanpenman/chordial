@@ -4,9 +4,9 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.tristanpenman.chordial.core.NodeProtocol._
 
 /**
- * Actor class that implements the FindPredecessor algorithm
+ * Actor class that implements the FindSuccessor algorithm
  *
- * The FindPredecessor algorithm is defined in the Chord paper as follows:
+ * The FindSuccessor algorithm is defined in the Chord paper as follows:
  *
  * n.find_successor(id)
  *   n' = find_predecessor(id)
