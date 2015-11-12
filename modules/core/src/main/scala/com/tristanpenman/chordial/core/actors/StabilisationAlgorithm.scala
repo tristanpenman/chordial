@@ -10,11 +10,13 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
  *
  * The Stabilise algorithm is defined in the Chord paper as follows:
  *
- * n.stabilise()
- *   x = successor.predecessor
- *   if (x IN (n, successor))
- *     successor = x;
- *   successor.notify(n);
+ * {{{
+ *   n.stabilise()
+ *     x = successor.predecessor
+ *     if (x IN (n, successor))
+ *       successor = x;
+ *     successor.notify(n);
+ * }}}
  */
 class StabilisationAlgorithm extends Actor with ActorLogging {
   import StabilisationAlgorithm._

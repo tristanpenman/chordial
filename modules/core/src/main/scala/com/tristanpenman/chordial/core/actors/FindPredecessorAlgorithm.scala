@@ -9,11 +9,13 @@ import com.tristanpenman.chordial.core.shared.Interval
  *
  * The FindPredecessor algorithm is defined in the Chord paper as follows:
  *
- * n.find_predecessor(id)
- *   n' = n;
- *   while (id NOT_IN (n', n'.successor])
- *     n' = n'.closest_preceding_finger(id);
- *   return n';
+ * {{{
+ *   n.find_predecessor(id)
+ *     n' = n;
+ *     while (id NOT_IN (n', n'.successor])
+ *       n' = n'.closest_preceding_finger(id);
+ *     return n';
+ * }}}
  *
  * This algorithm has been implemented as a series of alternating 'successor' and 'closest_preceding_finger'
  * operations, each performed by sending a message to an ActorRef and awaiting an appropriate response.

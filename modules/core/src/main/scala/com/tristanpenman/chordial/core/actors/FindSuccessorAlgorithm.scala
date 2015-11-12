@@ -8,9 +8,11 @@ import com.tristanpenman.chordial.core.NodeProtocol._
  *
  * The FindSuccessor algorithm is defined in the Chord paper as follows:
  *
- * n.find_successor(id)
- *   n' = find_predecessor(id)
- *   return n'.successor;
+ * {{{
+ *   n.find_successor(id)
+ *     n' = find_predecessor(id)
+ *     return n'.successor;
+ * }}}
  *
  * Although the algorithm is defined a way that allows 'find_predecessor' to be performed as an ordinary method call,
  * this class performs the operation by sending a message to an ActorRef and awaiting a response.
