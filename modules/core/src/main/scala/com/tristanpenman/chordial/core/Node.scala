@@ -225,10 +225,10 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
         sender() ! ClosestPrecedingFingerOk(queryId, ownId, self)
       }
 
-    case FindPredecessor(queryId: Long) =>
+    case FindPredecessor(queryId) =>
       findPredecessor(queryId, sender(), findPredecessorTimeout)
 
-    case FindSuccessor(queryId: Long) =>
+    case FindSuccessor(queryId) =>
       findSuccessor(queryId, sender(), findSuccessorTimeout)
 
     case GetId() =>
@@ -252,7 +252,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
           eventSinks.foreach(_ ! JoinedNetwork(ownId, newSuccessor.id))
       }
 
-    case Notify(candidateId: Long, candidateRef: ActorRef) =>
+    case Notify(candidateId, candidateRef) =>
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
         context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), stabilising))
         eventSinks.foreach(_ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)))
@@ -292,7 +292,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       }
 
 
-    case UpdateSuccessor(successorId: Long, successorRef: ActorRef) =>
+    case UpdateSuccessor(successorId, successorRef) =>
       context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilising))
       successorRef ! Notify(ownId, self)
       eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
