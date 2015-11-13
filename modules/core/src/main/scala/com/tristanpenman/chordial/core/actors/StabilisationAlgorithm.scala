@@ -1,9 +1,8 @@
 package com.tristanpenman.chordial.core.actors
 
-import akka.actor.{ActorRef, Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.NodeProtocol._
-import com.tristanpenman.chordial.core.shared.Interval
-import com.tristanpenman.chordial.core.shared.NodeInfo
+import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 /**
  * Actor class that implements the Stabilise algorithm
@@ -18,35 +17,38 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
  *     successor.notify(n);
  * }}}
  */
-class StabilisationAlgorithm extends Actor with ActorLogging {
+class StabilisationAlgorithm extends Actor {
+
   import StabilisationAlgorithm._
 
-  def awaitGetPredecessor(requestId: Long, delegate: ActorRef, ownId: Long, successor: NodeInfo): Receive = {
-    case GetPredecessorOk(predId, predRef) if Interval(ownId + 1, successor.id).contains(predId) =>
-      delegate ! StabilisationAlgorithmOk(NodeInfo(predId, predRef))
-      context.stop(self)
+  def awaitGetPredecessor(delegate: ActorRef, nodeId: Long, successor: NodeInfo): Receive = {
+    case GetPredecessorOk(candidateId, candidateRef) if Interval(nodeId + 1, successor.id).contains(candidateId) =>
+      delegate ! StabilisationAlgorithmFinished(NodeInfo(candidateId, candidateRef))
+      context.become(receive)
 
     case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() =>
-      delegate ! StabilisationAlgorithmOk(successor)
-      context.stop(self)
+      delegate ! StabilisationAlgorithmFinished(successor)
+      context.become(receive)
+  }
+
+  def awaitGetSuccessor(delegate: ActorRef, nodeId: Long): Receive = {
+    case GetSuccessorOk(successorId, successorRef) =>
+      successorRef ! GetPredecessor()
+      context.become(awaitGetPredecessor(delegate, nodeId, NodeInfo(successorId, successorRef)))
   }
 
   override def receive: Receive = {
-    case StabilisationAlgorithmBegin(requestId, ownId, successor) =>
-      successor.ref ! GetPredecessor()
-      context.become(awaitGetPredecessor(requestId, sender(), ownId, successor))
+    case StabilisationAlgorithmStart(node) =>
+      node.ref ! GetSuccessor()
+      context.become(awaitGetSuccessor(sender(), node.id))
   }
 }
 
 object StabilisationAlgorithm {
 
-  case class StabilisationAlgorithmBegin(requestId: Long, ownId: Long, successor: NodeInfo)
+  case class StabilisationAlgorithmStart(node: NodeInfo)
 
-  class StabilisationAlgorithmResponse
-
-  case class StabilisationAlgorithmOk(successor: NodeInfo) extends StabilisationAlgorithmResponse
-
-  case class StabilisationAlgorithmError(message: String) extends StabilisationAlgorithmResponse
+  case class StabilisationAlgorithmFinished(successor: NodeInfo)
 
   def props(): Props = Props(new StabilisationAlgorithm())
 }
