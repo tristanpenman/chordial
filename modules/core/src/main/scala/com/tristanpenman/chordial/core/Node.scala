@@ -106,13 +106,13 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
   import NodeProtocol._
 
   /** Time to wait for a GetPredecessor response during stabilisation */
-  private val stabilisationTimeout = Timeout(5000, MILLISECONDS)
+  private val stabilisationTimeout = Timeout(5000.milliseconds)
 
-  private val joinTimeout = Timeout(5000, MILLISECONDS)
+  private val joinTimeout = Timeout(5000.milliseconds)
 
-  private val findPredecessorTimeout = Timeout(5000, MILLISECONDS)
+  private val findPredecessorTimeout = Timeout(5000.milliseconds)
 
-  private val findSuccessorTimeout = Timeout(5000, MILLISECONDS)
+  private val findSuccessorTimeout = Timeout(5000.milliseconds)
 
   /**
    * Send a GetPredecessor request to the current node's closest known successor, and verify that the current node is
