@@ -83,6 +83,12 @@ object NodeProtocol {
 
   case class StabiliseError(stabilisationId: Long, message: String)
 
+  case class UpdateSuccessor(successorId: Long, successorRef: ActorRef)
+
+  class UpdateSuccessorResponse
+
+  case class UpdateSuccessorOk() extends UpdateSuccessorResponse
+
   class PublishedEvent
 
   case class JoinedNetwork(ownId: Long, seedId: Long) extends PublishedEvent
@@ -283,20 +289,24 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
     case StabiliseOk(stabilisationId: Long, successorId: Long, successorRef: ActorRef) =>
       pendingStabilisationId.foreach(expectedStabilisationId => {
         if (expectedStabilisationId == stabilisationId) {
-          context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, nextStabilisationId, None))
+          self ! UpdateSuccessor(successorId, successorRef)
           eventSinks.foreach(_ ! StabilisationFinished(ownId, successorId, successor.id))
-          successorRef ! Notify(ownId, self)
-          eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
         }
       })
 
     case StabiliseError(stabilisationId: Long, message: String) =>
       pendingStabilisationId.foreach(expectedStabilisationId => {
         if (expectedStabilisationId == stabilisationId) {
-          context.become(receiveWhileReady(successor, predecessor, nextStabilisationId, None))
+          self ! UpdateSuccessor(successor.id, successor.ref)
           eventSinks.foreach(_ ! StabilisationFinishedWithError(ownId, message))
         }
       })
+
+    case UpdateSuccessor(successorId: Long, successorRef: ActorRef) =>
+      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, nextStabilisationId, None))
+      successorRef ! Notify(ownId, self)
+      eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
+      sender() ! UpdateSuccessorOk()
   }
 
   override def receive: Receive = receiveWhileReady(NodeInfo(ownId, self), None, 0, None)
