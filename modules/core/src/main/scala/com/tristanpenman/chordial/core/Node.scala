@@ -271,6 +271,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
           pendingStabilisationId))
         eventSinks.foreach(_ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)))
       }
+      sender() ! NotifyOk()
 
     case Stabilise() =>
       if (pendingStabilisationId.isEmpty) {
