@@ -213,7 +213,8 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       },
       Duration.Inf)
 
-  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo], stabilising: Boolean): Receive = {
+  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo],
+                                stabilisationAlgorithm: ActorRef): Receive = {
     case ClosestPrecedingFinger(queryId) =>
       // Simplified version of the closest-preceding-finger algorithm that does not use a finger table. We first check
       // whether the closest known successor lies in the interval beginning immediately after the current node and
@@ -248,58 +249,47 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
     case Join(seedRef) =>
       join(seedRef, sender(), joinTimeout).foreach {
         case newSuccessor =>
-          context.become(receiveWhileReady(newSuccessor, None, stabilising = false))
+          context.stop(stabilisationAlgorithm)
+          context.become(receiveWhileReady(newSuccessor, None, context.actorOf(StabilisationAlgorithm.props())))
           eventSinks.foreach(_ ! JoinedNetwork(ownId, newSuccessor.id))
       }
 
     case Notify(candidateId, candidateRef) =>
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
-        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), stabilising))
+        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), stabilisationAlgorithm))
         eventSinks.foreach(_ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)))
         sender() ! NotifyOk()
       } else {
         sender() ! NotifyIgnored()
       }
 
-    case Stabilise(sequenceId) if stabilising =>
-      sender() ! StabiliseInProgress(sequenceId)
-
     case Stabilise(sequenceId) =>
-      val replyTo = sender()
-      val stabilisationAlgorithm = context.actorOf(StabilisationAlgorithm.props())
-      try {
-        context.become(receiveWhileReady(successor, predecessor, stabilising = true))
-        stabilisationAlgorithm.ask(StabilisationAlgorithmStart(NodeInfo(ownId, self)))(stabilisationTimeout)
-          .onComplete { result =>
-            context.stop(stabilisationAlgorithm)
-            context.become(receiveWhileReady(successor, predecessor, stabilising = false))
-            result match {
-              case util.Success(StabilisationAlgorithmFinished(newSuccessor)) =>
-                replyTo ! StabiliseOk(sequenceId, newSuccessor.id, newSuccessor.ref)
-              case util.Success(unexpected) =>
-                replyTo ! StabiliseError(sequenceId, "Stabilisation failed due internal error")
-              case util.Failure(exception: AskTimeoutException) =>
-                replyTo ! StabiliseError(sequenceId, "Stabilisation algorithm timed out")
-              case util.Failure(exception) =>
-                replyTo ! StabiliseError(sequenceId, s"Stabilisation algorithm failed: ${exception.getMessage}")
-            }
-          }
-      } catch {
-        case _: Throwable =>
-          context.stop(stabilisationAlgorithm)
-          context.become(receiveWhileReady(successor, predecessor, stabilising = false))
-          replyTo ! StabiliseError(sequenceId, "Stabilisation algorithm could not be started")
-      }
-
+      stabilisationAlgorithm.ask(StabilisationAlgorithmStart(NodeInfo(ownId, self)))(stabilisationTimeout)
+        .map {
+          case StabilisationAlgorithmFinished(newSuccessor) =>
+            StabiliseOk(sequenceId, newSuccessor.id, newSuccessor.ref)
+          case StabilisationAlgorithmAlreadyRunning() =>
+            StabiliseInProgress(sequenceId)
+          case unexpected =>
+            StabiliseError(sequenceId, "Stabilisation failed due internal error")
+        }
+        .recover {
+          case exception: AskTimeoutException =>
+            StabiliseError(sequenceId, "Stabilisation algorithm timed out")
+          case exception =>
+            StabiliseError(sequenceId, s"Stabilisation algorithm failed: ${exception.getMessage}")
+        }
+        .pipeTo(sender())
 
     case UpdateSuccessor(successorId, successorRef) =>
-      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilising))
+      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilisationAlgorithm))
       successorRef ! Notify(ownId, self)
       eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
       sender() ! UpdateSuccessorOk()
   }
 
-  override def receive: Receive = receiveWhileReady(NodeInfo(ownId, self), None, stabilising = false)
+  override def receive: Receive = receiveWhileReady(NodeInfo(ownId, self), None,
+    context.actorOf(StabilisationAlgorithm.props()))
 }
 
 object Node {

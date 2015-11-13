@@ -29,12 +29,18 @@ class StabilisationAlgorithm extends Actor {
     case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() =>
       delegate ! StabilisationAlgorithmFinished(successor)
       context.become(receive)
+
+    case StabilisationAlgorithmStart(_) =>
+      sender() ! StabilisationAlgorithmAlreadyRunning()
   }
 
   def awaitGetSuccessor(delegate: ActorRef, nodeId: Long): Receive = {
     case GetSuccessorOk(successorId, successorRef) =>
       successorRef ! GetPredecessor()
       context.become(awaitGetPredecessor(delegate, nodeId, NodeInfo(successorId, successorRef)))
+
+    case StabilisationAlgorithmStart(_) =>
+      sender() ! StabilisationAlgorithmAlreadyRunning()
   }
 
   override def receive: Receive = {
@@ -47,6 +53,8 @@ class StabilisationAlgorithm extends Actor {
 object StabilisationAlgorithm {
 
   case class StabilisationAlgorithmStart(node: NodeInfo)
+
+  case class StabilisationAlgorithmAlreadyRunning()
 
   case class StabilisationAlgorithmFinished(successor: NodeInfo)
 
