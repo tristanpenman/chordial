@@ -1,48 +1,22 @@
 package com.tristanpenman.chordial.core
 
 import akka.actor._
-import akka.pattern.{ask, pipe}
-import akka.util.Timeout
-import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
-import com.tristanpenman.chordial.core.actors._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 
 object NodeProtocol {
 
-  class ClosestPrecedingFingerResponse
-
   case class ClosestPrecedingFinger(queryId: Long)
+
+  class ClosestPrecedingFingerResponse
 
   case class ClosestPrecedingFingerOk(queryId: Long, nodeId: Long, nodeRef: ActorRef)
     extends ClosestPrecedingFingerResponse
 
   case class ClosestPrecedingFingerError(queryId: Long, message: String) extends ClosestPrecedingFingerResponse
 
-  class FindPredecessorResponse
-
-  case class FindPredecessor(queryId: Long)
-
-  case class FindPredecessorOk(queryId: Long, predecessorId: Long, predecessorRef: ActorRef)
-    extends FindPredecessorResponse
-
-  case class FindPredecessorError(queryId: Long, message: String) extends FindPredecessorResponse
-
-  class FindSuccessorResponse
-
-  case class FindSuccessor(queryId: Long)
-
-  case class FindSuccessorOk(queryId: Long, successorId: Long, successorRef: ActorRef)
-    extends FindSuccessorResponse
-
-  case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
+  case class GetId()
 
   class GetIdResponse
-
-  case class GetId()
 
   case class GetIdOk(id: Long) extends GetIdResponse
 
@@ -60,13 +34,11 @@ object NodeProtocol {
 
   case class GetSuccessorOk(successorId: Long, successorRef: ActorRef) extends GetSuccessorResponse
 
-  case class Notify(nodeId: Long, nodeRef: ActorRef)
+  case class UpdatePredecessor(predecessorId: Long, predecessorRef: ActorRef)
 
-  class NotifyResponse
+  class UpdatePredecessorResponse
 
-  case class NotifyOk() extends NotifyResponse
-
-  case class NotifyIgnored() extends NotifyResponse
+  case class UpdatePredecessorOk() extends UpdatePredecessorResponse
 
   case class UpdateSuccessor(successorId: Long, successorRef: ActorRef)
 
@@ -74,98 +46,13 @@ object NodeProtocol {
 
   case class UpdateSuccessorOk() extends UpdateSuccessorResponse
 
-  class PublishedEvent
-
-  case class PredecessorInitialised(ownId: Long, predecessorId: Long) extends PublishedEvent
-
-  case class PredecessorUpdated(ownId: Long, predecessorId: Long, prevPredecessorId: Option[Long]) extends PublishedEvent
-
-  case class StabilisationStarted(ownId: Long) extends PublishedEvent
-
-  case class StabilisationFinished(ownId: Long, successorId: Long, prevSuccessorId: Long) extends PublishedEvent
-
-  case class StabilisationFinishedWithError(ownId: Long, message: String) extends PublishedEvent
-
-  case class SuccessorNotified(ownId: Long, successorId: Long) extends PublishedEvent
-
 }
 
-class Node(ownId: Long, seed: Option[NodeInfo], eventSinks: Set[ActorRef]) extends Actor with ActorLogging {
+class Node(ownId: Long, seed: NodeInfo) extends Actor with ActorLogging {
 
   import NodeProtocol._
 
-  private val joinTimeout = Timeout(5000.milliseconds)
-
-  private val findPredecessorTimeout = Timeout(5000.milliseconds)
-
-  private val findSuccessorTimeout = Timeout(5000.milliseconds)
-
-  /**
-   * Returns true if the current predecessor should be replaced with the candidate node
-   */
-  private def shouldUpdatePredecessor(currentPred: Option[NodeInfo], candidateId: Long, candidateRef: ActorRef) = {
-    currentPred match {
-      case Some(pred) => Interval(pred.id + 1, ownId).contains(candidateId)
-      case None => true
-    }
-  }
-
-  /**
-   * Create an actor to execute the FindPredecessor algorithm and, when it finishes/fails, produce a response that
-   * will be recognised by the original sender of the request
-   *
-   * This method passes in the ID and ActorRef of the current node as the initial candidate node, which means the
-   * FindPredecessor algorithm will begin its search at the current node.
-   */
-  private def findPredecessor(queryId: Long, sender: ActorRef, requestTimeout: Timeout): Unit = {
-    // The FindPredecessorAlgorithm actor will shutdown immediately after it sends a FindPredecessorAlgorithmOk or
-    // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
-    // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
-    val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props())
-    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmBegin(queryId, ownId, self))(requestTimeout)
-      .mapTo[FindPredecessorAlgorithmResponse]
-      .map {
-        case FindPredecessorAlgorithmOk(predecessorId, predecessorRef) =>
-          FindPredecessorOk(queryId, predecessorId, predecessorRef)
-        case FindPredecessorAlgorithmError(message) =>
-          FindPredecessorError(queryId, message)
-      }
-      .recover {
-        case exception =>
-          context.stop(findPredecessorAlgorithm)
-          FindPredecessorError(queryId, exception.getMessage)
-      }
-      .pipeTo(sender)
-  }
-
-  /**
-   * Create an actor to execute the FindSuccessor algorithm and, when it finishes/fails, produce a response that
-   * will be recognised by the original sender of the request.
-   *
-   * This method passes in the ActorRef of the current node as the search node, which means the operation will be
-   * performed in the context of the current node.
-   */
-  private def findSuccessor(queryId: Long, sender: ActorRef, requestTimeout: Timeout): Unit = {
-    // The FindSuccessorAlgorithm actor will shutdown immediately after it sends a FindSuccessorAlgorithmOk or
-    // FindSuccessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
-    // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
-    val findSuccessorAlgorithm = context.actorOf(FindSuccessorAlgorithm.props())
-    findSuccessorAlgorithm.ask(FindSuccessorAlgorithmBegin(queryId, self))(requestTimeout)
-      .mapTo[FindSuccessorAlgorithmResponse]
-      .map {
-        case FindSuccessorAlgorithmOk(successorId, successorRef) =>
-          FindSuccessorOk(queryId, successorId, successorRef)
-        case FindSuccessorAlgorithmError(message) =>
-          FindSuccessorError(queryId, message)
-      }
-      .recover {
-        case exception =>
-          context.stop(findSuccessorAlgorithm)
-          FindSuccessorError(queryId, exception.getMessage)
-      }
-      .pipeTo(sender)
-  }
-
+  //noinspection ScalaStyle
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo]): Receive = {
     case ClosestPrecedingFinger(queryId) =>
       // Simplified version of the closest-preceding-finger algorithm that does not use a finger table. We first check
@@ -177,12 +64,6 @@ class Node(ownId: Long, seed: Option[NodeInfo], eventSinks: Set[ActorRef]) exten
       } else {
         sender() ! ClosestPrecedingFingerOk(queryId, ownId, self)
       }
-
-    case FindPredecessor(queryId) =>
-      findPredecessor(queryId, sender(), findPredecessorTimeout)
-
-    case FindSuccessor(queryId) =>
-      findSuccessor(queryId, sender(), findSuccessorTimeout)
 
     case GetId() =>
       sender() ! GetIdOk(ownId)
@@ -198,26 +79,19 @@ class Node(ownId: Long, seed: Option[NodeInfo], eventSinks: Set[ActorRef]) exten
     case GetSuccessor() =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
 
-    case Notify(candidateId, candidateRef) =>
-      if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
-        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef))))
-        eventSinks.foreach(_ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)))
-        sender() ! NotifyOk()
-      } else {
-        sender() ! NotifyIgnored()
-      }
+    case UpdatePredecessor(predecessorId, predecessorRef) =>
+      context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef))))
+      sender() ! UpdatePredecessorOk()
 
     case UpdateSuccessor(successorId, successorRef) =>
       context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor))
-      successorRef ! Notify(ownId, self)
-      eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
       sender() ! UpdateSuccessorOk()
   }
 
-  override def receive: Receive = receiveWhileReady(seed.getOrElse(NodeInfo(ownId, self)), None)
+  override def receive: Receive = receiveWhileReady(seed, None)
 }
 
 object Node {
-  def props(ownId: Long, seed: Option[NodeInfo] = None, eventSinks: Set[ActorRef] = Set.empty): Props =
-    Props(new Node(ownId, seed, eventSinks))
+  def props(ownId: Long, seed: NodeInfo): Props =
+    Props(new Node(ownId, seed))
 }
