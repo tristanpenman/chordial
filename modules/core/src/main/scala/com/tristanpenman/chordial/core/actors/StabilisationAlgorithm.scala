@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.core.actors
 
-import akka.actor.{ActorLogging, Actor, ActorRef, Props}
-import com.tristanpenman.chordial.core.Coordinator.{NotifyError, NotifyIgnored, NotifyOk, Notify}
+import akka.actor.{Actor, ActorRef, Props}
+import com.tristanpenman.chordial.core.Coordinator.{Notify, NotifyError, NotifyIgnored, NotifyOk}
 import com.tristanpenman.chordial.core.NodeProtocol._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
@@ -18,7 +18,7 @@ import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
  *     successor.notify(n);
  * }}}
  */
-class StabilisationAlgorithm extends Actor with ActorLogging {
+class StabilisationAlgorithm extends Actor {
 
   import StabilisationAlgorithm._
 

@@ -124,7 +124,6 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
   }
 
   def receiveWhileReady(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef): Receive = {
-
     case m@ClosestPrecedingFinger(queryId: Long) =>
       nodeRef.ask(m)(requestTimeout).pipeTo(sender())
 
@@ -151,7 +150,6 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
 
     case Stabilise() =>
       stabilise(nodeRef, stabilisationAlgorithm, sender(), requestTimeout)
-
   }
 
   override def receive: Receive = receiveWhileReady(newNode(nodeId, nodeId, self), newStabilisationAlgorithm())
