@@ -1,16 +1,13 @@
 package com.tristanpenman.chordial.core
 
 import akka.actor._
-import akka.pattern.{AskTimeoutException, ask, pipe}
+import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.StabilisationAlgorithm._
 import com.tristanpenman.chordial.core.actors._
-import com.tristanpenman.chordial.core.shared.Interval
-import com.tristanpenman.chordial.core.shared.NodeInfo
+import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
-import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
@@ -63,14 +60,6 @@ object NodeProtocol {
 
   case class GetSuccessorOk(successorId: Long, successorRef: ActorRef) extends GetSuccessorResponse
 
-  class JoinResponse
-
-  case class Join(seed: ActorRef)
-
-  case class JoinOk(successorId: Long) extends JoinResponse
-
-  case class JoinError(message: String) extends JoinResponse
-
   case class Notify(nodeId: Long, nodeRef: ActorRef)
 
   class NotifyResponse
@@ -79,14 +68,6 @@ object NodeProtocol {
 
   case class NotifyIgnored() extends NotifyResponse
 
-  case class Stabilise(sequenceId: Long)
-
-  case class StabiliseInProgress(sequenceId: Long)
-
-  case class StabiliseOk(sequenceId: Long, successorId: Long, successorRef: ActorRef)
-
-  case class StabiliseError(sequenceId: Long, message: String)
-
   case class UpdateSuccessor(successorId: Long, successorRef: ActorRef)
 
   class UpdateSuccessorResponse
@@ -94,8 +75,6 @@ object NodeProtocol {
   case class UpdateSuccessorOk() extends UpdateSuccessorResponse
 
   class PublishedEvent
-
-  case class JoinedNetwork(ownId: Long, seedId: Long) extends PublishedEvent
 
   case class PredecessorInitialised(ownId: Long, predecessorId: Long) extends PublishedEvent
 
@@ -111,12 +90,9 @@ object NodeProtocol {
 
 }
 
-class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLogging {
+class Node(ownId: Long, seed: Option[NodeInfo], eventSinks: Set[ActorRef]) extends Actor with ActorLogging {
 
   import NodeProtocol._
-
-  /** Time to wait for a GetPredecessor response during stabilisation */
-  private val stabilisationTimeout = Timeout(5000.milliseconds)
 
   private val joinTimeout = Timeout(5000.milliseconds)
 
@@ -190,31 +166,7 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
       .pipeTo(sender)
   }
 
-  /**
-   * Attempt to join an existing Chord network, blocking until the join is successful or the request timeout period has
-   * elapsed
-   *
-   * This is a simplified version of the join algorithm that simply uses the seed node as the successor, which means
-   * that the only operation we're blocking on is the request for that node's ID. Although we may already have that
-   * information stored locally, this ensures that the node is live.
-   */
-  private def join(seedRef: ActorRef, sender: ActorRef, requestTimeout: Timeout): Option[NodeInfo] =
-    Await.result(seedRef.ask(GetId())(requestTimeout)
-      .mapTo[GetIdOk]
-      .map {
-        case GetIdOk(seedId) =>
-          sender ! JoinOk(seedId)
-          Some(NodeInfo(seedId, seedRef))
-      }
-      .recover {
-        case exception =>
-          sender ! JoinError(exception.getMessage)
-          None
-      },
-      Duration.Inf)
-
-  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo],
-                                stabilisationAlgorithm: ActorRef): Receive = {
+  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo]): Receive = {
     case ClosestPrecedingFinger(queryId) =>
       // Simplified version of the closest-preceding-finger algorithm that does not use a finger table. We first check
       // whether the closest known successor lies in the interval beginning immediately after the current node and
@@ -246,52 +198,26 @@ class Node(ownId: Long, eventSinks: Set[ActorRef]) extends Actor with ActorLoggi
     case GetSuccessor() =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
 
-    case Join(seedRef) =>
-      join(seedRef, sender(), joinTimeout).foreach {
-        case newSuccessor =>
-          context.stop(stabilisationAlgorithm)
-          context.become(receiveWhileReady(newSuccessor, None, context.actorOf(StabilisationAlgorithm.props())))
-          eventSinks.foreach(_ ! JoinedNetwork(ownId, newSuccessor.id))
-      }
-
     case Notify(candidateId, candidateRef) =>
       if (shouldUpdatePredecessor(predecessor, candidateId, candidateRef)) {
-        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef)), stabilisationAlgorithm))
+        context.become(receiveWhileReady(successor, Some(NodeInfo(candidateId, candidateRef))))
         eventSinks.foreach(_ ! PredecessorUpdated(ownId, candidateId, predecessor.map(_.id)))
         sender() ! NotifyOk()
       } else {
         sender() ! NotifyIgnored()
       }
 
-    case Stabilise(sequenceId) =>
-      stabilisationAlgorithm.ask(StabilisationAlgorithmStart(NodeInfo(ownId, self)))(stabilisationTimeout)
-        .map {
-          case StabilisationAlgorithmFinished(newSuccessor) =>
-            StabiliseOk(sequenceId, newSuccessor.id, newSuccessor.ref)
-          case StabilisationAlgorithmAlreadyRunning() =>
-            StabiliseInProgress(sequenceId)
-          case unexpected =>
-            StabiliseError(sequenceId, "Stabilisation failed due internal error")
-        }
-        .recover {
-          case exception: AskTimeoutException =>
-            StabiliseError(sequenceId, "Stabilisation algorithm timed out")
-          case exception =>
-            StabiliseError(sequenceId, s"Stabilisation algorithm failed: ${exception.getMessage}")
-        }
-        .pipeTo(sender())
-
     case UpdateSuccessor(successorId, successorRef) =>
-      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, stabilisationAlgorithm))
+      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor))
       successorRef ! Notify(ownId, self)
       eventSinks.foreach(_ ! SuccessorNotified(ownId, successorId))
       sender() ! UpdateSuccessorOk()
   }
 
-  override def receive: Receive = receiveWhileReady(NodeInfo(ownId, self), None,
-    context.actorOf(StabilisationAlgorithm.props()))
+  override def receive: Receive = receiveWhileReady(seed.getOrElse(NodeInfo(ownId, self)), None)
 }
 
 object Node {
-  def props(ownId: Long, eventSinks: Set[ActorRef] = Set.empty): Props = Props(new Node(ownId, eventSinks))
+  def props(ownId: Long, seed: Option[NodeInfo] = None, eventSinks: Set[ActorRef] = Set.empty): Props =
+    Props(new Node(ownId, seed, eventSinks))
 }
