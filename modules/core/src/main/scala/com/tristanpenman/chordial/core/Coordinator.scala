@@ -6,12 +6,12 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.NodeProtocol._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
+import com.tristanpenman.chordial.core.actors.NotifyAlgorithm.{NotifyAlgorithmFinished, NotifyAlgorithmResponse, NotifyAlgorithmStart}
 import com.tristanpenman.chordial.core.actors.StabilisationAlgorithm._
-import com.tristanpenman.chordial.core.actors.{FindPredecessorAlgorithm, FindSuccessorAlgorithm, StabilisationAlgorithm}
-import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
+import com.tristanpenman.chordial.core.actors.{FindPredecessorAlgorithm, FindSuccessorAlgorithm, NotifyAlgorithm, StabilisationAlgorithm}
+import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with ActorLogging {
@@ -84,27 +84,24 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
       .pipeTo(sender)
   }
 
-  private def notify(nodeRef: ActorRef, candidateId: Long, candidateRef: ActorRef) = {
-    nodeRef.ask(GetPredecessor())(getPredecessorTimeout)
+  private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef, timeout: Timeout) = {
+    val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
+    notifyAlgorithm.ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(timeout)
+      .mapTo[NotifyAlgorithmResponse]
       .map {
-        case GetPredecessorOk(predecessorId, predecessorRef) =>
-          Interval(predecessorId + 1, nodeId).contains(candidateId)
-        case GetPredecessorOkButUnknown() =>
-          true
-      }
-      .flatMap {
-        case true =>
-          nodeRef.ask(UpdatePredecessor(candidateId, candidateRef))(updatePredecessorTimeout)
-            .mapTo[UpdatePredecessorResponse]
-            .map {
-              case UpdatePredecessorOk() =>
-                true
-            }
-        case false =>
-          Future {
-            false
+        case NotifyAlgorithmFinished(predecessorUpdated: Boolean) =>
+          if (predecessorUpdated) {
+            NotifyOk()
+          } else {
+            NotifyIgnored()
           }
       }
+      .recover {
+        case exception =>
+          context.stop(notifyAlgorithm)
+          NotifyError(exception.getMessage)
+      }
+      .pipeTo(replyTo)
   }
 
   private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef, timeout: Timeout) = {
@@ -150,18 +147,7 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
       sender() ! JoinOk()
 
     case Notify(candidateId, candidateRef) =>
-      notify(nodeRef, candidateId, candidateRef)
-        .map {
-          case true =>
-            NotifyOk()
-          case false =>
-            NotifyIgnored()
-        }
-        .recover {
-          case exception =>
-            NotifyError(exception.getMessage)
-        }
-        .pipeTo(sender())
+      notify(nodeRef, NodeInfo(candidateId, candidateRef), sender(), requestTimeout)
 
     case Stabilise() =>
       stabilise(nodeRef, stabilisationAlgorithm, sender(), requestTimeout)
