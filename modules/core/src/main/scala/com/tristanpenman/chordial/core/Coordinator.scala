@@ -12,15 +12,10 @@ import com.tristanpenman.chordial.core.actors.{FindPredecessorAlgorithm, FindSuc
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 
 class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with ActorLogging {
 
   import Coordinator._
-
-  private val getPredecessorTimeout = Timeout(2000.milliseconds)
-
-  private val updatePredecessorTimeout = Timeout(2000.milliseconds)
 
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
     context.actorOf(Node.props(nodeId, NodeInfo(seedId, seedRef)))
