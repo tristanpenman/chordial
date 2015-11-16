@@ -4,24 +4,50 @@ import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.actors.CheckPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.NotifyAlgorithm.{NotifyAlgorithmFinished, NotifyAlgorithmResponse, NotifyAlgorithmStart}
+import com.tristanpenman.chordial.core.actors.NotifyAlgorithm._
 import com.tristanpenman.chordial.core.actors.StabilisationAlgorithm._
-import com.tristanpenman.chordial.core.actors.{FindPredecessorAlgorithm, FindSuccessorAlgorithm, NotifyAlgorithm, StabilisationAlgorithm}
+import com.tristanpenman.chordial.core.actors._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
-class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with ActorLogging {
+class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration)
+  extends Actor with ActorLogging {
 
   import Coordinator._
 
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
     context.actorOf(Node.props(nodeId, NodeInfo(seedId, seedRef)))
 
+  private def newCheckPredecessorAlgorithm() =
+    context.actorOf(CheckPredecessorAlgorithm.props())
+
   private def newStabilisationAlgorithm() =
     context.actorOf(StabilisationAlgorithm.props())
+
+  private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef,
+                               requestTimeout: Timeout) = {
+    checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart(nodeRef, livenessCheckDuration))(requestTimeout)
+      .mapTo[CheckPredecessorAlgorithmStartResponse]
+      .map {
+        case CheckPredecessorAlgorithmAlreadyRunning() =>
+          CheckPredecessorInProgress()
+        case CheckPredecessorAlgorithmFinished() =>
+          CheckPredecessorOk()
+        case CheckPredecessorAlgorithmFailed(message) =>
+          CheckPredecessorError(message)
+      }
+      .recover {
+        case exception =>
+          log.error(exception.getMessage)
+          CheckPredecessorError("CheckPredecessor request failed due to internal error")
+      }
+      .pipeTo(replyTo)
+  }
 
   /**
    * Create an actor to execute the FindPredecessor algorithm and, when it finishes/fails, produce a response that
@@ -99,8 +125,9 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
       .pipeTo(replyTo)
   }
 
-  private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef, timeout: Timeout) = {
-    stabilisationAlgorithm.ask(StabilisationAlgorithmStart(NodeInfo(nodeId, self), nodeRef))(timeout)
+  private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef,
+                        requestTimeout: Timeout) = {
+    stabilisationAlgorithm.ask(StabilisationAlgorithmStart(NodeInfo(nodeId, self), nodeRef))(requestTimeout)
       .mapTo[StabilisationAlgorithmStartResponse]
       .map {
         case StabilisationAlgorithmAlreadyRunning() =>
@@ -112,13 +139,18 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
       }
       .recover {
         case exception =>
-          log.info(exception.getMessage)
-          StabiliseError(exception.getMessage)
+          log.error(exception.getMessage)
+          StabiliseError("Stabilise request failed due to internal error")
       }
       .pipeTo(replyTo)
   }
 
-  def receiveWhileReady(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef): Receive = {
+  def receiveWhileReady(nodeRef: ActorRef,
+                        checkPredecessorAlgorithm: ActorRef,
+                        stabilisationAlgorithm: ActorRef): Receive = {
+    case CheckPredecessor() =>
+      checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender(), requestTimeout)
+
     case m@ClosestPrecedingFinger(queryId: Long) =>
       nodeRef.ask(m)(requestTimeout).pipeTo(sender())
 
@@ -136,8 +168,10 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
 
     case Join(seedId, seedRef) =>
       context.stop(nodeRef)
+      context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
-      context.become(receiveWhileReady(newNode(nodeId, seedId, seedRef), newStabilisationAlgorithm()))
+      context.become(receiveWhileReady(newNode(nodeId, seedId, seedRef), newCheckPredecessorAlgorithm(),
+        newStabilisationAlgorithm()))
       sender() ! JoinOk()
 
     case Notify(candidateId, candidateRef) =>
@@ -147,10 +181,21 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout) extends Actor with Acto
       stabilise(nodeRef, stabilisationAlgorithm, sender(), requestTimeout)
   }
 
-  override def receive: Receive = receiveWhileReady(newNode(nodeId, nodeId, self), newStabilisationAlgorithm())
+  override def receive: Receive = receiveWhileReady(newNode(nodeId, nodeId, self), newCheckPredecessorAlgorithm(),
+    newStabilisationAlgorithm())
 }
 
 object Coordinator {
+
+  case class CheckPredecessor()
+
+  class CheckPredecessorResponse
+
+  case class CheckPredecessorInProgress() extends CheckPredecessorResponse
+
+  case class CheckPredecessorOk() extends CheckPredecessorResponse
+
+  case class CheckPredecessorError(message: String) extends CheckPredecessorResponse
 
   class FindPredecessorResponse
 
@@ -198,5 +243,6 @@ object Coordinator {
 
   case class StabiliseError(message: String) extends StabiliseResponse
 
-  def props(nodeId: Long, requestTimeout: Timeout): Props = Props(new Coordinator(nodeId, requestTimeout: Timeout))
+  def props(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration): Props =
+    Props(new Coordinator(nodeId, requestTimeout, livenessCheckDuration))
 }

@@ -34,6 +34,12 @@ object NodeProtocol {
 
   case class GetSuccessorOk(successorId: Long, successorRef: ActorRef) extends GetSuccessorResponse
 
+  case class ResetPredecessor()
+
+  class ResetPredecessorResponse
+
+  case class ResetPredecessorOk() extends ResetPredecessorResponse
+
   case class UpdatePredecessor(predecessorId: Long, predecessorRef: ActorRef)
 
   class UpdatePredecessorResponse
@@ -78,6 +84,10 @@ class Node(ownId: Long, seed: NodeInfo) extends Actor with ActorLogging {
 
     case GetSuccessor() =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
+
+    case ResetPredecessor() =>
+      context.become(receiveWhileReady(successor, None))
+      sender() ! ResetPredecessorOk()
 
     case UpdatePredecessor(predecessorId, predecessorRef) =>
       context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef))))
