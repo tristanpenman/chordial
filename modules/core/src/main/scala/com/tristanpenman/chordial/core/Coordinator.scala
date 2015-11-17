@@ -154,6 +154,9 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
     case m@ClosestPrecedingFinger(queryId: Long) =>
       nodeRef.ask(m)(requestTimeout).pipeTo(sender())
 
+    case m@GetId() =>
+      nodeRef.ask(m)(requestTimeout).pipeTo(sender())
+
     case m@GetPredecessor() =>
       nodeRef.ask(m)(requestTimeout).pipeTo(sender())
 
