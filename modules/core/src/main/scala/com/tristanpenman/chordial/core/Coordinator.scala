@@ -190,9 +190,13 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
 
 object Coordinator {
 
-  case class CheckPredecessor()
+  sealed trait Request
 
-  class CheckPredecessorResponse
+  sealed trait Response
+
+  case class CheckPredecessor() extends Request
+
+  sealed trait CheckPredecessorResponse extends Response
 
   case class CheckPredecessorInProgress() extends CheckPredecessorResponse
 
@@ -200,35 +204,35 @@ object Coordinator {
 
   case class CheckPredecessorError(message: String) extends CheckPredecessorResponse
 
-  class FindPredecessorResponse
+  case class FindPredecessor(queryId: Long) extends Request
 
-  case class FindPredecessor(queryId: Long)
+  sealed trait FindPredecessorResponse extends Response
 
   case class FindPredecessorOk(queryId: Long, predecessorId: Long, predecessorRef: ActorRef)
     extends FindPredecessorResponse
 
   case class FindPredecessorError(queryId: Long, message: String) extends FindPredecessorResponse
 
-  class FindSuccessorResponse
+  case class FindSuccessor(queryId: Long) extends Request
 
-  case class FindSuccessor(queryId: Long)
+  sealed trait FindSuccessorResponse extends Response
 
   case class FindSuccessorOk(queryId: Long, successorId: Long, successorRef: ActorRef)
     extends FindSuccessorResponse
 
   case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
 
-  case class Join(seedId: Long, seedRef: ActorRef)
+  case class Join(seedId: Long, seedRef: ActorRef) extends Request
 
-  class JoinResponse
+  sealed trait JoinResponse extends Response
 
   case class JoinOk() extends JoinResponse
 
   case class JoinError(message: String) extends JoinResponse
 
-  case class Notify(nodeId: Long, nodeRef: ActorRef)
+  case class Notify(nodeId: Long, nodeRef: ActorRef) extends Request
 
-  class NotifyResponse
+  sealed trait NotifyResponse extends Response
 
   case class NotifyOk() extends NotifyResponse
 
@@ -236,9 +240,9 @@ object Coordinator {
 
   case class NotifyError(message: String) extends NotifyResponse
 
-  case class Stabilise()
+  case class Stabilise() extends Request
 
-  class StabiliseResponse
+  sealed trait StabiliseResponse extends Response
 
   case class StabiliseInProgress() extends StabiliseResponse
 
