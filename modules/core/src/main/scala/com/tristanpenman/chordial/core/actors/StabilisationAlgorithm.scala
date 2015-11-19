@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.core.actors
 
 import akka.actor.{Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.Coordinator.{Notify, NotifyError, NotifyIgnored, NotifyOk}
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 /**

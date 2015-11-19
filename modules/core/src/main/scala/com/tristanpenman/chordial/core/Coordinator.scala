@@ -3,7 +3,6 @@ package com.tristanpenman.chordial.core
 import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.NodeProtocol._
 import com.tristanpenman.chordial.core.actors.CheckPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
@@ -19,6 +18,7 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
   extends Actor with ActorLogging {
 
   import Coordinator._
+  import Node._
 
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
     context.actorOf(Node.props(nodeId, NodeInfo(seedId, seedRef)))

@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.core.actors
 
 import akka.actor._
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 
 import scala.concurrent.duration.Duration
 

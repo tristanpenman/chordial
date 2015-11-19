@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.core
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 

@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.daemon.service
 
 import akka.actor.{ActorSystem, Actor, ActorRef}
 import akka.testkit.TestActorRef
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 import org.scalatest.{FlatSpec, ShouldMatchers}
 import spray.testkit.ScalatestRouteTest
 

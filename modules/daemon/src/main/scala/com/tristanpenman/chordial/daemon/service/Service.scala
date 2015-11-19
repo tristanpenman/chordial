@@ -7,7 +7,7 @@ import spray.http.MediaTypes._
 import spray.httpx.marshalling.ToResponseMarshallable
 import spray.routing._
 
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._

@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.core.actors
 
 import akka.actor.{ActorLogging, ActorRef, Actor, Props}
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.Interval
 
 /**
@@ -45,13 +45,13 @@ class FindPredecessorAlgorithm extends Actor with ActorLogging {
   }
 
   def awaitClosestPrecedingFinger(queryId: Long, delegate: ActorRef): Actor.Receive = {
-    case ClosestPrecedingFingerOk(actualQueryId, candidateId, candidateRef) if actualQueryId == queryId =>
+    case ClosestPrecedingFingerOk(candidateId, candidateRef) =>
       // Now that we have the ID and ActorRef for the next candidate node, we can proceed to the next step of the
       // algorithm. This requires that we locate the successor of the candidate node.
       candidateRef ! GetSuccessor()
       context.become(awaitGetSuccessor(queryId, delegate, candidateId, candidateRef))
 
-    case ClosestPrecedingFingerError(queryId: Long, message: String) =>
+    case ClosestPrecedingFingerError(message: String) =>
       delegate ! FindPredecessorAlgorithmError(s"ClosestPrecedingFinder request failed with message: $message")
       context.stop(self)
 

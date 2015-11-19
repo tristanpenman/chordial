@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.core.actors
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.tristanpenman.chordial.core.Coordinator.{FindPredecessor, FindPredecessorError, FindPredecessorOk}
-import com.tristanpenman.chordial.core.NodeProtocol._
+import com.tristanpenman.chordial.core.Node._
 
 /**
  * Actor class that implements the FindSuccessor algorithm
