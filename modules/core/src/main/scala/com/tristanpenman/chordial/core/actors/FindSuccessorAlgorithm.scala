@@ -27,6 +27,9 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
       delegate ! FindSuccessorAlgorithmOk(successorId, successorRef)
       context.stop(self)
 
+    case FindSuccessorAlgorithmStart(_, _) =>
+      sender() ! FindSuccessorAlgorithmAlreadyRunning()
+
     case message =>
       log.warning("Received unexpected message while waiting for GetSuccessorResponse: {}", message)
   }
@@ -40,30 +43,35 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
       delegate ! FindSuccessorAlgorithmError(message)
       context.stop(self)
 
+    case FindSuccessorAlgorithmStart(_, _) =>
+      sender() ! FindSuccessorAlgorithmAlreadyRunning()
+
     case message =>
       log.warning("Received unexpected message while waiting for FindPredecessorResponse: {}", message)
   }
 
   override def receive: Receive = {
-    case FindSuccessorAlgorithmBegin(queryId: Long, initialNodeRef: ActorRef) =>
+    case FindSuccessorAlgorithmStart(queryId: Long, initialNodeRef: ActorRef) =>
       initialNodeRef ! FindPredecessor(queryId)
       context.become(awaitFindPredecessor(sender()))
 
     case message =>
-      log.warning("Received unexpected message while waiting for FindSuccessorAlgorithmBegin: {}", message)
+      log.warning("Received unexpected message while waiting for FindSuccessorAlgorithmStart: {}", message)
   }
 }
 
 object FindSuccessorAlgorithm {
 
-  case class FindSuccessorAlgorithmBegin(queryId: Long, initialNodeRef: ActorRef)
+  case class FindSuccessorAlgorithmStart(queryId: Long, initialNodeRef: ActorRef)
 
-  class FindSuccessorAlgorithmResponse
+  sealed trait FindSuccessorAlgorithmStartResponse
+
+  case class FindSuccessorAlgorithmAlreadyRunning() extends FindSuccessorAlgorithmStartResponse
 
   case class FindSuccessorAlgorithmOk(successorId: Long, successorRef: ActorRef)
-    extends FindSuccessorAlgorithmResponse
+    extends FindSuccessorAlgorithmStartResponse
 
-  case class FindSuccessorAlgorithmError(message: String) extends FindSuccessorAlgorithmResponse
+  case class FindSuccessorAlgorithmError(message: String) extends FindSuccessorAlgorithmStartResponse
 
   def props(): Props = Props(new FindSuccessorAlgorithm())
 }

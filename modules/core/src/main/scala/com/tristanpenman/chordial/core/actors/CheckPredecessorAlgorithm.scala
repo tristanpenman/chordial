@@ -18,22 +18,25 @@ import scala.concurrent.duration.Duration
  *
  * Liveness is checked by sending a GetSuccessor message to the predecessor
  */
-class CheckPredecessorAlgorithm extends Actor {
+class CheckPredecessorAlgorithm extends Actor with ActorLogging {
 
   import CheckPredecessorAlgorithm._
 
   private def awaitResetPredecessor(replyTo: ActorRef): Receive = {
     case ResetPredecessorOk() =>
-      replyTo ! CheckPredecessorAlgorithmFinished()
+      replyTo ! CheckPredecessorAlgorithmOk()
       context.become(receive)
 
     case CheckPredecessorAlgorithmStart(_, _) =>
       sender() ! CheckPredecessorAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for ResetPredecessorResponse: {}", message)
   }
 
   private def awaitGetSuccessor(replyTo: ActorRef, innerNodeRef: ActorRef): Receive = {
     case GetSuccessorOk(_, _) =>
-      replyTo ! CheckPredecessorAlgorithmFinished()
+      replyTo ! CheckPredecessorAlgorithmOk()
       context.setReceiveTimeout(Duration.Undefined)
       context.become(receive)
 
@@ -44,6 +47,9 @@ class CheckPredecessorAlgorithm extends Actor {
 
     case CheckPredecessorAlgorithmStart(_, _) =>
       sender() ! CheckPredecessorAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for GetSuccessorResponse: {}", message)
   }
 
   private def awaitGetPredecessor(replyTo: ActorRef, innerNodeRef: ActorRef,
@@ -54,32 +60,37 @@ class CheckPredecessorAlgorithm extends Actor {
       context.become(awaitGetSuccessor(replyTo, innerNodeRef))
 
     case GetPredecessorOkButUnknown() =>
-      replyTo ! CheckPredecessorAlgorithmFinished()
+      replyTo ! CheckPredecessorAlgorithmOk()
       context.become(receive)
 
     case CheckPredecessorAlgorithmStart(_, _) =>
       sender() ! CheckPredecessorAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for GetPredecessorResponse: {}", message)
   }
 
   override def receive: Receive = {
     case CheckPredecessorAlgorithmStart(innerNodeRef, livenessCheckDuration) =>
       innerNodeRef ! GetPredecessor()
       context.become(awaitGetPredecessor(sender(), innerNodeRef, livenessCheckDuration))
-  }
 
+    case message =>
+      log.warning("Received unexpected message while waiting for CheckPredecessorAlgorithmStart: {}", message)
+  }
 }
 
 object CheckPredecessorAlgorithm {
 
   case class CheckPredecessorAlgorithmStart(innerNodeRef: ActorRef, livenessCheckDuration: Duration)
 
-  class CheckPredecessorAlgorithmStartResponse
+  sealed trait CheckPredecessorAlgorithmStartResponse
 
   case class CheckPredecessorAlgorithmAlreadyRunning() extends CheckPredecessorAlgorithmStartResponse
 
-  case class CheckPredecessorAlgorithmFinished() extends CheckPredecessorAlgorithmStartResponse
+  case class CheckPredecessorAlgorithmOk() extends CheckPredecessorAlgorithmStartResponse
 
-  case class CheckPredecessorAlgorithmFailed(message: String) extends CheckPredecessorAlgorithmStartResponse
+  case class CheckPredecessorAlgorithmError(message: String) extends CheckPredecessorAlgorithmStartResponse
 
   def props(): Props = Props(new CheckPredecessorAlgorithm())
 

@@ -40,8 +40,11 @@ class FindPredecessorAlgorithm extends Actor with ActorLogging {
         context.become(awaitClosestPrecedingFinger(queryId, delegate))
       }
 
+    case FindPredecessorAlgorithmStart(_, _, _) =>
+      sender() ! FindPredecessorAlgorithmAlreadyRunning()
+
     case message =>
-      log.warning("Received unexpected message while waiting for GetSuccessor response: {}", message)
+      log.warning("Received unexpected message while waiting for GetSuccessorResponse: {}", message)
   }
 
   def awaitClosestPrecedingFinger(queryId: Long, delegate: ActorRef): Actor.Receive = {
@@ -55,27 +58,35 @@ class FindPredecessorAlgorithm extends Actor with ActorLogging {
       delegate ! FindPredecessorAlgorithmError(s"ClosestPrecedingFinder request failed with message: $message")
       context.stop(self)
 
+    case FindPredecessorAlgorithmStart(_, _, _) =>
+      sender() ! FindPredecessorAlgorithmAlreadyRunning()
+
     case message =>
-      log.warning("Received unexpected message while waiting for ClosestPrecedingFinger response: {}", message)
+      log.warning("Received unexpected message while waiting for ClosestPrecedingFingerResponse: {}", message)
   }
 
   override def receive: Receive = {
-    case FindPredecessorAlgorithmBegin(queryId: Long, initialNodeId: Long, initialNodeRef: ActorRef) =>
+    case FindPredecessorAlgorithmStart(queryId: Long, initialNodeId: Long, initialNodeRef: ActorRef) =>
       initialNodeRef ! GetSuccessor()
       context.become(awaitGetSuccessor(queryId, sender(), initialNodeId, initialNodeRef))
+
+    case message =>
+      log.warning("Received unexpected message while waiting for FindPredecessorAlgorithmStart: {}", message)
   }
 }
 
 object FindPredecessorAlgorithm {
 
-  case class FindPredecessorAlgorithmBegin(queryId: Long, initialNodeId: Long, initialNodeRef: ActorRef)
+  case class FindPredecessorAlgorithmStart(queryId: Long, initialNodeId: Long, initialNodeRef: ActorRef)
 
-  class FindPredecessorAlgorithmResponse
+  sealed trait FindPredecessorAlgorithmStartResponse
+
+  case class FindPredecessorAlgorithmAlreadyRunning() extends FindPredecessorAlgorithmStartResponse
 
   case class FindPredecessorAlgorithmOk(predecessorId: Long, predecessor: ActorRef)
-    extends FindPredecessorAlgorithmResponse
+    extends FindPredecessorAlgorithmStartResponse
 
-  case class FindPredecessorAlgorithmError(message: String) extends FindPredecessorAlgorithmResponse
+  case class FindPredecessorAlgorithmError(message: String) extends FindPredecessorAlgorithmStartResponse
 
   def props(): Props = Props(new FindPredecessorAlgorithm())
 

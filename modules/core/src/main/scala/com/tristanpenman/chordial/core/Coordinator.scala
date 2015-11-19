@@ -36,9 +36,9 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
       .map {
         case CheckPredecessorAlgorithmAlreadyRunning() =>
           CheckPredecessorInProgress()
-        case CheckPredecessorAlgorithmFinished() =>
+        case CheckPredecessorAlgorithmOk() =>
           CheckPredecessorOk()
-        case CheckPredecessorAlgorithmFailed(message) =>
+        case CheckPredecessorAlgorithmError(message) =>
           CheckPredecessorError(message)
       }
       .recover {
@@ -61,11 +61,13 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
     // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
     val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props())
-    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmBegin(queryId, nodeId, self))(algorithmTimeout)
-      .mapTo[FindPredecessorAlgorithmResponse]
+    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmStart(queryId, nodeId, self))(algorithmTimeout)
+      .mapTo[FindPredecessorAlgorithmStartResponse]
       .map {
         case FindPredecessorAlgorithmOk(predecessorId, predecessorRef) =>
           FindPredecessorOk(queryId, predecessorId, predecessorRef)
+        case FindPredecessorAlgorithmAlreadyRunning() =>
+          throw new Exception("FindPredecessorAlgorithm actor already running")
         case FindPredecessorAlgorithmError(message) =>
           FindPredecessorError(queryId, message)
       }
@@ -89,11 +91,13 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
     // FindSuccessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
     val findSuccessorAlgorithm = context.actorOf(FindSuccessorAlgorithm.props())
-    findSuccessorAlgorithm.ask(FindSuccessorAlgorithmBegin(queryId, self))(algorithmTimeout)
-      .mapTo[FindSuccessorAlgorithmResponse]
+    findSuccessorAlgorithm.ask(FindSuccessorAlgorithmStart(queryId, self))(algorithmTimeout)
+      .mapTo[FindSuccessorAlgorithmStartResponse]
       .map {
         case FindSuccessorAlgorithmOk(successorId, successorRef) =>
           FindSuccessorOk(queryId, successorId, successorRef)
+        case FindSuccessorAlgorithmAlreadyRunning() =>
+          throw new Exception("FindSuccessorAlgorithm actor already running")
         case FindSuccessorAlgorithmError(message) =>
           FindSuccessorError(queryId, message)
       }
@@ -108,14 +112,18 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
   private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef, timeout: Timeout) = {
     val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
     notifyAlgorithm.ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(timeout)
-      .mapTo[NotifyAlgorithmResponse]
+      .mapTo[NotifyAlgorithmStartResponse]
       .map {
-        case NotifyAlgorithmFinished(predecessorUpdated: Boolean) =>
+        case NotifyAlgorithmOk(predecessorUpdated: Boolean) =>
           if (predecessorUpdated) {
             NotifyOk()
           } else {
             NotifyIgnored()
           }
+        case NotifyAlgorithmAlreadyRunning() =>
+          throw new Exception("NotifyAlgorithm actor already running")
+        case NotifyAlgorithmError(message) =>
+          NotifyError(message)
       }
       .recover {
         case exception =>
@@ -132,9 +140,9 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
       .map {
         case StabilisationAlgorithmAlreadyRunning() =>
           StabiliseInProgress()
-        case StabilisationAlgorithmFinished() =>
+        case StabilisationAlgorithmOk() =>
           StabiliseOk()
-        case StabilisationAlgorithmFailed(message) =>
+        case StabilisationAlgorithmError(message) =>
           StabiliseError(message)
       }
       .recover {

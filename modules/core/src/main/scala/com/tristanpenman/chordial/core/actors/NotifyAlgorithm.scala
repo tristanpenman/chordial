@@ -1,6 +1,6 @@
 package com.tristanpenman.chordial.core.actors
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{ActorLogging, Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
@@ -15,17 +15,20 @@ import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
  *       predecessor = n';
  * }}}
  */
-class NotifyAlgorithm extends Actor {
+class NotifyAlgorithm extends Actor with ActorLogging {
 
   import NotifyAlgorithm._
 
   def awaitUpdatePredecessor(delegate: ActorRef): Receive = {
     case UpdatePredecessorOk() =>
-      delegate ! NotifyAlgorithmFinished(true)
+      delegate ! NotifyAlgorithmOk(true)
       context.stop(self)
 
     case NotifyAlgorithmStart(_, _, _) =>
       sender() ! NotifyAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for UpdatePredecessorResponse: {}", message)
   }
 
   def awaitGetPredecessor(delegate: ActorRef, node: NodeInfo, candidate: NodeInfo, innerNodeRef: ActorRef): Receive = {
@@ -34,7 +37,7 @@ class NotifyAlgorithm extends Actor {
         innerNodeRef ! UpdatePredecessor(candidate.id, candidate.ref)
         context.become(awaitUpdatePredecessor(delegate))
       } else {
-        delegate ! NotifyAlgorithmFinished(false)
+        delegate ! NotifyAlgorithmOk(false)
         context.stop(self)
       }
 
@@ -44,12 +47,18 @@ class NotifyAlgorithm extends Actor {
 
     case NotifyAlgorithmStart(_, _, _) =>
       sender() ! NotifyAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for GetPredecessorResponse: {}", message)
   }
 
   override def receive: Receive = {
     case NotifyAlgorithmStart(node, candidate, innerNodeRef) =>
       innerNodeRef ! GetPredecessor()
       context.become(awaitGetPredecessor(sender(), node, candidate, innerNodeRef))
+
+    case message =>
+      log.warning("Received unexpected message while waiting for NotifyAlgorithmStart: {}", message)
   }
 }
 
@@ -57,11 +66,13 @@ object NotifyAlgorithm {
 
   case class NotifyAlgorithmStart(node: NodeInfo, candidate: NodeInfo, innerNodeRef: ActorRef)
 
-  class NotifyAlgorithmResponse
+  sealed trait NotifyAlgorithmStartResponse
 
-  case class NotifyAlgorithmAlreadyRunning() extends NotifyAlgorithmResponse
+  case class NotifyAlgorithmAlreadyRunning() extends NotifyAlgorithmStartResponse
 
-  case class NotifyAlgorithmFinished(predecessorUpdated: Boolean) extends NotifyAlgorithmResponse
+  case class NotifyAlgorithmOk(predecessorUpdated: Boolean) extends NotifyAlgorithmStartResponse
+
+  case class NotifyAlgorithmError(message: String) extends NotifyAlgorithmStartResponse
 
   def props(): Props = Props(new NotifyAlgorithm())
 }

@@ -1,6 +1,6 @@
 package com.tristanpenman.chordial.core.actors
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{ActorLogging, Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.Coordinator.{Notify, NotifyError, NotifyIgnored, NotifyOk}
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
@@ -18,25 +18,28 @@ import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
  *     successor.notify(n);
  * }}}
  */
-class StabilisationAlgorithm extends Actor {
+class StabilisationAlgorithm extends Actor with ActorLogging {
 
   import StabilisationAlgorithm._
 
   def awaitNotify(delegate: ActorRef): Receive = {
     case NotifyOk() =>
-      delegate ! StabilisationAlgorithmFinished()
+      delegate ! StabilisationAlgorithmOk()
       context.become(receive)
 
     case NotifyIgnored() =>
-      delegate ! StabilisationAlgorithmFinished()
+      delegate ! StabilisationAlgorithmOk()
       context.become(receive)
 
     case NotifyError(message) =>
-      delegate ! StabilisationAlgorithmFailed("Successor responded to Notify request with error: $message")
+      delegate ! StabilisationAlgorithmError("Successor responded to Notify request with error: $message")
       context.become(receive)
 
     case StabilisationAlgorithmStart(_, _) =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for NotifyResponse: {}", message)
   }
 
   def awaitUpdateSuccessor(delegate: ActorRef, node: NodeInfo, successorRef: ActorRef): Receive = {
@@ -46,6 +49,9 @@ class StabilisationAlgorithm extends Actor {
 
     case StabilisationAlgorithmStart(_, _) =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for UpdateSuccessorResponse: {}", message)
   }
 
   def awaitGetPredecessor(delegate: ActorRef, node: NodeInfo, successor: NodeInfo, innerNodeRef: ActorRef): Receive = {
@@ -59,6 +65,9 @@ class StabilisationAlgorithm extends Actor {
 
     case StabilisationAlgorithmStart(_, _) =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for GetPredecessorResponse: {}", message)
   }
 
   def awaitGetSuccessor(delegate: ActorRef, node: NodeInfo, innerNodeRef: ActorRef): Receive = {
@@ -68,12 +77,18 @@ class StabilisationAlgorithm extends Actor {
 
     case StabilisationAlgorithmStart(_, _) =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
+
+    case message =>
+      log.warning("Received unexpected message while waiting for StabilisationAlgorithmStart: {}", message)
   }
 
   override def receive: Receive = {
     case StabilisationAlgorithmStart(node, innerNodeRef) =>
       innerNodeRef ! GetSuccessor()
       context.become(awaitGetSuccessor(sender(), node, innerNodeRef))
+
+    case message =>
+      log.warning("Received unexpected message while waiting for StabilisationAlgorithmStart: {}", message)
   }
 }
 
@@ -81,13 +96,13 @@ object StabilisationAlgorithm {
 
   case class StabilisationAlgorithmStart(node: NodeInfo, innerNodeRef: ActorRef)
 
-  class StabilisationAlgorithmStartResponse
+  sealed trait StabilisationAlgorithmStartResponse
 
   case class StabilisationAlgorithmAlreadyRunning() extends StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmFinished() extends StabilisationAlgorithmStartResponse
+  case class StabilisationAlgorithmOk() extends StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmFailed(message: String) extends StabilisationAlgorithmStartResponse
+  case class StabilisationAlgorithmError(message: String) extends StabilisationAlgorithmStartResponse
 
   def props(): Props = Props(new StabilisationAlgorithm())
 }
