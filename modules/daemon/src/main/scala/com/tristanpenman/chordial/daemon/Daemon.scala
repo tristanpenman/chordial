@@ -64,7 +64,9 @@ object Daemon extends App {
     }
 
   private val nodeId = 0L
-  private val nodeRef = system.actorOf(Coordinator.props(nodeId, requestTimeout, livenessCheckDuration))
+  private val nodeRef = system.actorOf(Coordinator.props(nodeId, requestTimeout, livenessCheckDuration,
+    system.eventStream))
+
   private val server = system.actorOf(WebSocketServer.props(nodeRef), "websocket")
 
   IO(UHttp) ? Http.Bind(server, "localhost", httpPortNumber)

@@ -1,9 +1,11 @@
 package com.tristanpenman.chordial.core
 
 import akka.actor._
+import akka.event.EventStream
+import com.tristanpenman.chordial.core.Event.{PredecessorUpdated, PredecessorReset, SuccessorUpdated}
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
-class Node(ownId: Long, seed: NodeInfo) extends Actor with ActorLogging {
+class Node(ownId: Long, seed: NodeInfo, eventStream: EventStream) extends Actor with ActorLogging {
 
   import Node._
 
@@ -37,14 +39,17 @@ class Node(ownId: Long, seed: NodeInfo) extends Actor with ActorLogging {
     case ResetPredecessor() =>
       context.become(receiveWhileReady(successor, None))
       sender() ! ResetPredecessorOk()
+      eventStream.publish(PredecessorReset(ownId))
 
     case UpdatePredecessor(predecessorId, predecessorRef) =>
       context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef))))
       sender() ! UpdatePredecessorOk()
+      eventStream.publish(PredecessorUpdated(ownId, predecessorId))
 
     case UpdateSuccessor(successorId, successorRef) =>
       context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor))
       sender() ! UpdateSuccessorOk()
+      eventStream.publish(SuccessorUpdated(ownId, successorId))
   }
 
   override def receive: Receive = receiveWhileReady(seed, None)
@@ -102,5 +107,5 @@ object Node {
 
   case class UpdateSuccessorOk() extends UpdateSuccessorResponse
 
-  def props(ownId: Long, seed: NodeInfo): Props = Props(new Node(ownId, seed))
+  def props(ownId: Long, seed: NodeInfo, eventStream: EventStream): Props = Props(new Node(ownId, seed, eventStream))
 }

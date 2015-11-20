@@ -1,6 +1,7 @@
 package com.tristanpenman.chordial.core
 
 import akka.actor._
+import akka.event.EventStream
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.actors.CheckPredecessorAlgorithm._
@@ -14,14 +15,14 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
-class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration)
+class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration, eventStream: EventStream)
   extends Actor with ActorLogging {
 
   import Coordinator._
   import Node._
 
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
-    context.actorOf(Node.props(nodeId, NodeInfo(seedId, seedRef)))
+    context.actorOf(Node.props(nodeId, NodeInfo(seedId, seedRef), eventStream))
 
   private def newCheckPredecessorAlgorithm() =
     context.actorOf(CheckPredecessorAlgorithm.props())
@@ -258,6 +259,6 @@ object Coordinator {
 
   case class StabiliseError(message: String) extends StabiliseResponse
 
-  def props(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration): Props =
-    Props(new Coordinator(nodeId, requestTimeout, livenessCheckDuration))
+  def props(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration, eventStream: EventStream): Props =
+    Props(new Coordinator(nodeId, requestTimeout, livenessCheckDuration, eventStream))
 }

@@ -16,9 +16,11 @@ with BeforeAndAfterAll {
   }
 
   "A Node actor" must {
-
     val ownId = 1L
-    val node: ActorRef = system.actorOf(Node.props(ownId, NodeInfo(ownId, self)))
+    val seedId = 2L
+    val seedRef = self
+
+    val node: ActorRef = system.actorOf(Node.props(ownId, NodeInfo(seedId, seedRef), system.eventStream))
 
     "respond to a GetId message with a GetIdOk message containing its ID" in {
       node ! GetId()
@@ -30,9 +32,9 @@ with BeforeAndAfterAll {
       expectMsg(GetPredecessorOkButUnknown())
     }
 
-    "respond to a GetSuccessor message with a GetSuccessorOk message containing its own ID and ActorRef" in {
+    "respond to a GetSuccessor message with a GetSuccessorOk message containing the ID and ActorRef of a seed node" in {
       node ! GetSuccessor()
-      expectMsg(GetSuccessorOk(ownId, node))
+      expectMsg(GetSuccessorOk(seedId, seedRef))
     }
   }
 
