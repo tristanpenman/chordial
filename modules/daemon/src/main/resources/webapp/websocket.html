@@ -1,55 +1,114 @@
 <!DOCTYPE html>
 <html>
-<meta charset="utf-8" />
+<head>
+<meta charset="utf-8"/>
 <title>WebSocket Test</title>
+<style type="text/css">
+    body {
+        text-align: center;
+    }
+
+    svg {
+        border: 1px solid #ccc;
+        padding: 20px;
+    }
+
+    path.arc {
+        fill: #fff;
+        stroke: #999;
+    }
+
+    path.chord {
+        fill: none;
+        stroke: #336699;
+    }
+</style>
+<script src="lib/d3/d3.js" charset="utf-8"></script>
+</head>
+<body>
+  <h2>Chord Stabilisation Demo</h2>
+</body>
 <script language="javascript" type="text/javascript">
+
     var wsUri = "ws://localhost:4567/";
-    var output;
-    function init() {
-        output = document.getElementById("output");
-        testWebSocket();
-    }
-    function testWebSocket() {
-        websocket = new WebSocket(wsUri);
-        websocket.onopen = function(evt) {
-            onOpen(evt)
+
+    window.onload = function () {
+
+        var w = 600, h = 600;
+
+        var radius = Math.min(w, h) / 2;
+
+        // Chrome 15 bug: <http://code.google.com/p/chromium/issues/detail?id=98951>
+        var div = d3.select("body").append("div")
+                .style("width", w + "px")
+                .style("height", w + "px")
+                .style("margin", "0 auto")
+                .style("-webkit-backface-visibility", "hidden");
+
+        var svg = div.append("svg:svg")
+                .attr("width", w)
+                .attr("height", w)
+                .append("svg:g")
+                .attr("transform", "translate(" + radius + "," + radius + ")");
+
+        svg.append("svg:path")
+                .attr("class", "arc")
+                .attr("d", d3.svg.arc().outerRadius(radius).innerRadius(0).startAngle(0).endAngle(2 * Math.PI));
+
+        var line = d3.svg.line.radial()
+                .interpolate("bundle")
+                .tension(0.6)
+                .radius(function (d) {
+                    return d.radius;
+                })
+                .angle(function (d) {
+                    return d.value / 180 * Math.PI;
+                });
+
+        var bundle = d3.layout.bundle();
+        var hierarchy = d3.layout.hierarchy();
+
+        var websocket = new WebSocket(wsUri);
+
+        websocket.onopen = function (event) {
+
         };
-        websocket.onclose = function(evt) {
-            onClose(evt)
+
+        websocket.onclose = function (event) {
+            console.log("Connection closed");
         };
-        websocket.onmessage = function(evt) {
-            onMessage(evt)
+
+        websocket.onError = function (event) {
+            console.log(event.data);
         };
-        websocket.onerror = function(evt) {
-            onError(evt)
-        };
+
+        websocket.onmessage = function (event) {
+            var json = JSON.parse(event.data);
+            if (json.hasOwnProperty('type') && json.type === 'SuccessorUpdated') {
+                var root = {parent: null, radius: 0};
+                var source = {value: json.nodeId, radius: radius, parent: root};
+                var target = {value: json.successorId, radius: radius, parent: root};
+                root.children = [source, target];
+                hierarchy(root);
+                var splines = bundle([
+                    {
+                        source: source,
+                        target: target
+                    }
+                ]);
+
+                // TODO: This can likely be improved using a data() join
+                var selection = svg.selectAll(".node-" + json.nodeId);
+                if (selection.size() > 0) {
+                    selection.attr("d", line(splines[0]));
+                } else {
+                    svg.append("svg:path")
+                            .attr("class", "chord node-" + json.nodeId)
+                            .attr("d", line(splines[0]));
+                }
+            }
+        }
     }
-    function onOpen(evt) {
-        writeToScreen("CONNECTED");
-        doSend("Rock rock rock rock");
-    }
-    function onClose(evt) {
-        writeToScreen("DISCONNECTED");
-    }
-    function onMessage(evt) {
-        writeToScreen('<span style="color: blue;">RESPONSE: ' + evt.data + '</span>');
-        //websocket.close();
-    }
-    function onError(evt) {
-        writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
-    }
-    function doSend(message) {
-        writeToScreen("SENT: " + message);
-        websocket.send(message);
-    }
-    function writeToScreen(message) {
-        var pre = document.createElement("p");
-        pre.style.wordWrap = "break-word";
-        pre.innerHTML = message;
-        output.appendChild(pre);
-    }
-    window.addEventListener("load", init, false);
+
 </script>
-<h2>WebSocket Test</h2>
-<div id="output"></div>
 </html>

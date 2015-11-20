@@ -26,14 +26,13 @@ class WebSocketWorker(val serverConnection: ActorRef, val nodeRef: ActorRef)
       sender() ! x
 
     case e: Event =>
-      log.info("Received event")
       e match {
         case PredecessorReset(nodeId) =>
-          send(TextFrame(s"Predecessor of node $nodeId has been reset"))
+          send(TextFrame(s"""{ "type": "PredecessorReset", "nodeId": $nodeId }"""))
         case PredecessorUpdated(nodeId, predecessorId) =>
-          send(TextFrame(s"Predecessor of node $nodeId updated to $predecessorId"))
+          send(TextFrame(s"""{ "type": "PredecessorUpdated", "nodeId": $nodeId, "predecessorId": $predecessorId }"""))
         case SuccessorUpdated(nodeId, successorId) =>
-          send(TextFrame(s"Successor of node $nodeId updated to $successorId"))
+          send(TextFrame(s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $successorId }"""))
       }
 
     case x: FrameCommandFailed =>
