@@ -1,6 +1,7 @@
 package com.tristanpenman.chordial.daemon.service
 
-import akka.actor.{Props, ActorRef, Actor}
+import akka.actor.{Actor, ActorRef, Props}
+import com.tristanpenman.chordial.core.Event
 import spray.can.Http
 
 class WebSocketServer(val nodeRef: ActorRef) extends Actor {
@@ -9,6 +10,9 @@ class WebSocketServer(val nodeRef: ActorRef) extends Actor {
       val serverConnection = sender()
       val conn = context.actorOf(WebSocketWorker.props(serverConnection, nodeRef))
       serverConnection ! Http.Register(conn)
+
+    case e: Event =>
+      context.children.foreach { _ ! e }
   }
 }
 

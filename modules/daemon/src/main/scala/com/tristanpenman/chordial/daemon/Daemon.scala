@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Coordinator
+import com.tristanpenman.chordial.core.{Event, Coordinator}
 import com.tristanpenman.chordial.core.Coordinator._
 import com.tristanpenman.chordial.daemon.service.WebSocketServer
 import spray.can.Http
@@ -68,6 +68,8 @@ object Daemon extends App {
     system.eventStream))
 
   private val server = system.actorOf(WebSocketServer.props(nodeRef), "websocket")
+
+  system.eventStream.subscribe(server, classOf[Event])
 
   IO(UHttp) ? Http.Bind(server, "localhost", httpPortNumber)
 

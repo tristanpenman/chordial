@@ -1,6 +1,8 @@
 package com.tristanpenman.chordial.daemon.service
 
 import akka.actor._
+import com.tristanpenman.chordial.core.Event
+import com.tristanpenman.chordial.core.Event.{PredecessorUpdated, PredecessorReset, SuccessorUpdated}
 import spray.can.websocket
 import spray.can.websocket.FrameCommandFailed
 import spray.can.websocket.frame.{TextFrame, BinaryFrame}
@@ -23,7 +25,16 @@ class WebSocketWorker(val serverConnection: ActorRef, val nodeRef: ActorRef)
     case x@(_: BinaryFrame | _: TextFrame) => // Bounce back
       sender() ! x
 
-    //case Push(msg) => send(TextFrame(msg))
+    case e: Event =>
+      log.info("Received event")
+      e match {
+        case PredecessorReset(nodeId) =>
+          send(TextFrame(s"Predecessor of node $nodeId has been reset"))
+        case PredecessorUpdated(nodeId, predecessorId) =>
+          send(TextFrame(s"Predecessor of node $nodeId updated to $predecessorId"))
+        case SuccessorUpdated(nodeId, successorId) =>
+          send(TextFrame(s"Successor of node $nodeId updated to $successorId"))
+      }
 
     case x: FrameCommandFailed =>
       log.error("frame command failed", x)
