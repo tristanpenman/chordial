@@ -1,6 +1,6 @@
 package com.tristanpenman.chordial.daemon
 
-import akka.actor.{Props, Actor, ActorLogging, ActorRef}
+import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Coordinator
@@ -64,11 +64,8 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
     }
 
   private def createNode(nodeId: Long): ActorRef = {
-    val nodeRef = context.system.actorOf(Coordinator.props(nodeId, requestTimeout, livenessCheckDuration,
+    context.system.actorOf(Coordinator.props(nodeId, requestTimeout, livenessCheckDuration,
       context.system.eventStream))
-    scheduleCheckPredecessor(nodeRef)
-    scheduleStabilisation(nodeRef)
-    nodeRef
   }
 
   @tailrec
@@ -81,12 +78,18 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
     }
   }
 
-  private def receiveWithNodes(nodes: Map[Long, ActorRef]): Receive = {
+  private def receiveWithNodes(nodes: Map[Long, ActorRef],
+                               stabilisationCancellables: Map[Long, Cancellable],
+                               checkPredecessorCancellables: Map[Long, Cancellable]): Receive = {
     case CreateNode() =>
       if (nodes.size < idModulus) {
         val nodeId = generateUniqueId(nodes.keySet)
         val nodeRef = createNode(nodeId)
-        context.become(receiveWithNodes(nodes + (nodeId -> nodeRef)))
+        val stabilisationCancellable = scheduleStabilisation(nodeRef)
+        val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
+        context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
+          stabilisationCancellables + (nodeId -> stabilisationCancellable),
+          checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
         sender() ! CreateNodeOk(nodeId, nodeRef)
       } else {
         sender() ! CreateNodeError(s"Maximum of $idModulus Chord nodes already running")
@@ -97,7 +100,6 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
         case Some(seedRef) =>
           val nodeId = generateUniqueId(nodes.keySet)
           val nodeRef = createNode(nodeId)
-
           val joinRequest = nodeRef.ask(Join(seedId, seedRef))(joinRequestTimeout)
             .mapTo[JoinResponse]
             .map {
@@ -110,7 +112,11 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
 
           Await.result(joinRequest, Duration.Inf) match {
             case Success(()) =>
-              context.become(receiveWithNodes(nodes + (nodeId -> nodeRef)))
+              val stabilisationCancellable = scheduleStabilisation(nodeRef)
+              val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
+              context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
+                stabilisationCancellables + (nodeId -> stabilisationCancellable),
+                checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
               sender() ! CreateNodeWithSeedOk(nodeId, nodeRef)
             case Failure(ex) =>
               context.stop(nodeRef)
@@ -123,7 +129,7 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
 
     case GetNodeIdSet() =>
       sender() ! GetNodeIdSetOk(nodes.keySet)
-      
+
     case GetNodeSuccessorId(nodeId: Long) =>
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
@@ -140,9 +146,23 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
         case None =>
           sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId does not exist")
       }
+
+    case TerminateNode(nodeId: Long) =>
+      nodes.get(nodeId) match {
+        case Some(nodeRef) =>
+          checkPredecessorCancellables.get(nodeId).foreach(_.cancel())
+          stabilisationCancellables.get(nodeId).foreach(_.cancel())
+          context.stop(nodeRef)
+          context.become(receiveWithNodes(nodes - nodeId, stabilisationCancellables - nodeId,
+            checkPredecessorCancellables - nodeId))
+          sender() ! TerminateNodeResponseOk()
+
+        case None =>
+          sender() ! TerminateNodeResponseError(s"Node with ID $nodeId does not exist")
+      }
   }
 
-  override def receive: Receive = receiveWithNodes(Map.empty)
+  override def receive: Receive = receiveWithNodes(Map.empty, Map.empty, Map.empty)
 }
 
 object Governor {
@@ -168,9 +188,9 @@ object Governor {
   case class CreateNodeWithSeedError(message: String) extends CreateNodeWithSeedResponse
 
   case class GetNodeIdSet() extends Request
-  
+
   sealed trait GetNodeIdSetResponse extends Response
-  
+
   case class GetNodeIdSetOk(nodeIds: Set[Long]) extends GetNodeIdSetResponse
 
   case class GetNodeSuccessorId(nodeId: Long) extends Request
@@ -180,6 +200,14 @@ object Governor {
   case class GetNodeSuccessorIdOk(successorId: Long) extends GetNodeSuccessorIdResponse
 
   case class GetNodeSuccessorIdError(message: String) extends GetNodeSuccessorIdResponse
+
+  case class TerminateNode(nodeId: Long) extends Request
+
+  sealed trait TerminateNodeResponse extends Response
+
+  case class TerminateNodeResponseOk() extends TerminateNodeResponse
+
+  case class TerminateNodeResponseError(message: String) extends TerminateNodeResponse
 
   def props(idModulus: Int): Props = Props(new Governor(idModulus))
 

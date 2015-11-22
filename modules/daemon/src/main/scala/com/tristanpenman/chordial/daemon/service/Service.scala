@@ -5,14 +5,14 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.daemon.Governor._
 import spray.http.MediaTypes._
+import spray.http.StatusCodes
 import spray.httpx.marshalling.ToResponseMarshallable
+import spray.json.DefaultJsonProtocol._
 import spray.json._
 import spray.routing._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
-
-import DefaultJsonProtocol._
 
 trait Service extends HttpService {
   implicit def ec: ExecutionContextExecutor = actorRefFactory.dispatcher
@@ -44,6 +44,14 @@ trait Service extends HttpService {
         Future.sequence(
           nodeIdSet.map { case nodeId => getNodeAttributes(nodeId) }
         )
+    }
+
+  private def terminateNode(nodeId: Long): Future[Unit] = governor.ask(TerminateNode(nodeId))
+    .mapTo[TerminateNodeResponse]
+    .map {
+      case TerminateNodeResponseOk() =>
+      case TerminateNodeResponseError(message: String) =>
+        throw new Exception(message)
     }
 
   val routes = pathPrefix("nodes") {
@@ -94,6 +102,12 @@ trait Service extends HttpService {
               _.toJson.compactPrint
             })
           }
+        }
+      } ~ delete {
+        complete {
+          ToResponseMarshallable.isMarshallable(
+            terminateNode(nodeId).map { _ => StatusCodes.OK }
+          )
         }
       }
     }
