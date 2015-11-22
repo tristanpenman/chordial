@@ -5,9 +5,9 @@ import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Event
-import com.tristanpenman.chordial.daemon.service.WebSocketServer
 import spray.can.Http
 import spray.can.server.UHttp
+
 import scala.concurrent.duration._
 import scala.io.StdIn
 

@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.daemon.service
+package com.tristanpenman.chordial.daemon
 
 import akka.actor.ActorRef
 import akka.pattern.ask
@@ -14,7 +14,7 @@ import spray.routing._
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-trait Service extends HttpService {
+trait WebService extends HttpService {
   implicit def ec: ExecutionContextExecutor = actorRefFactory.dispatcher
 
   implicit val timeout: Timeout = 3.seconds

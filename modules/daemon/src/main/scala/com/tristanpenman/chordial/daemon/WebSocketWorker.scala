@@ -1,16 +1,17 @@
-package com.tristanpenman.chordial.daemon.service
+package com.tristanpenman.chordial.daemon
 
 import akka.actor._
 import com.tristanpenman.chordial.core.Event
-import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorUpdated, PredecessorReset, SuccessorUpdated}
+import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorUpdated}
+import com.tristanpenman.chordial.daemon.WebService
 import spray.can.websocket
 import spray.can.websocket.FrameCommandFailed
-import spray.can.websocket.frame.{TextFrame, BinaryFrame}
+import spray.can.websocket.frame.{BinaryFrame, TextFrame}
 import spray.http.HttpRequest
 import spray.routing.HttpServiceActor
 
 class WebSocketWorker(val serverConnection: ActorRef, val governor: ActorRef)
-  extends HttpServiceActor with websocket.WebSocketServerWorker with Service {
+  extends HttpServiceActor with websocket.WebSocketServerWorker with WebService {
 
   private def routesWithEventStream = routes ~ pathPrefix("eventstream") {
     getFromResourceDirectory("webapp")

@@ -3,10 +3,11 @@ package com.tristanpenman.chordial.daemon.service
 import akka.actor.{ActorSystem, Actor, ActorRef}
 import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.daemon.WebService
 import org.scalatest.{FlatSpec, ShouldMatchers}
 import spray.testkit.ScalatestRouteTest
 
-class ServiceSpec extends FlatSpec with ShouldMatchers with Service with ScalatestRouteTest {
+class WebServiceSpec extends FlatSpec with ShouldMatchers with WebService with ScalatestRouteTest {
   def actorRefFactory: ActorSystem = system
 
   override protected def governor: ActorRef = TestActorRef(new Actor {

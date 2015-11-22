@@ -1,7 +1,8 @@
-package com.tristanpenman.chordial.daemon.service
+package com.tristanpenman.chordial.daemon
 
 import akka.actor.{Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.Event
+import com.tristanpenman.chordial.daemon.WebSocketWorker
 import spray.can.Http
 
 class WebSocketServer(val governor: ActorRef) extends Actor {
