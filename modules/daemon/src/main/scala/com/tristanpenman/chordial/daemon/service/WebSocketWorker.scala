@@ -9,7 +9,7 @@ import spray.can.websocket.frame.{TextFrame, BinaryFrame}
 import spray.http.HttpRequest
 import spray.routing.HttpServiceActor
 
-class WebSocketWorker(val serverConnection: ActorRef, val nodeRef: ActorRef)
+class WebSocketWorker(val serverConnection: ActorRef, val governor: ActorRef)
   extends HttpServiceActor with websocket.WebSocketServerWorker with Service {
 
   private def routesWithEventStream = routes ~ pathPrefix("eventstream") {

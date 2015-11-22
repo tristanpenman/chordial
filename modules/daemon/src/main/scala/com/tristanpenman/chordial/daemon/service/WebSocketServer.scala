@@ -4,11 +4,11 @@ import akka.actor.{Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.Event
 import spray.can.Http
 
-class WebSocketServer(val nodeRef: ActorRef) extends Actor {
+class WebSocketServer(val governor: ActorRef) extends Actor {
   override def receive: Receive = {
     case Http.Connected(remoteAddress, localAddress) =>
       val serverConnection = sender()
-      val conn = context.actorOf(WebSocketWorker.props(serverConnection, nodeRef))
+      val conn = context.actorOf(WebSocketWorker.props(serverConnection, governor))
       serverConnection ! Http.Register(conn)
 
     case e: Event =>
@@ -17,5 +17,5 @@ class WebSocketServer(val nodeRef: ActorRef) extends Actor {
 }
 
 object WebSocketServer {
-  def props(nodeRef: ActorRef): Props = Props(new WebSocketServer(nodeRef))
+  def props(governor: ActorRef): Props = Props(new WebSocketServer(governor))
 }

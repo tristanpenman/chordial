@@ -9,7 +9,7 @@ import spray.testkit.ScalatestRouteTest
 class ServiceSpec extends FlatSpec with ShouldMatchers with Service with ScalatestRouteTest {
   def actorRefFactory: ActorSystem = system
 
-  override protected def nodeRef: ActorRef = TestActorRef(new Actor {
+  override protected def governor: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
       case GetId() =>
         sender() ! GetIdOk(0L)
