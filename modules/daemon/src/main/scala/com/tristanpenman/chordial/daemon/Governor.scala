@@ -121,21 +121,24 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
           sender() ! CreateNodeWithSeedError(s"Node with ID $seedId does not exist")
       }
 
-    case GetNodeSuccessor(nodeId: Long) =>
+    case GetNodeIdSet() =>
+      sender() ! GetNodeIdSetOk(nodes.keySet)
+      
+    case GetNodeSuccessorId(nodeId: Long) =>
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
           val getSuccessorRequest = nodeRef.ask(GetSuccessor())(getSuccessorRequestTimeout)
             .mapTo[GetSuccessorResponse]
             .map {
-              case GetSuccessorOk(successorId, _) => GetNodeSuccessorOk(successorId)
+              case GetSuccessorOk(successorId, _) => GetNodeSuccessorIdOk(successorId)
             }
             .recover {
-              case ex => GetNodeSuccessorError(ex.getMessage)
+              case ex => GetNodeSuccessorIdError(ex.getMessage)
             }
             .pipeTo(sender())
 
         case None =>
-          sender() ! GetNodeSuccessorError(s"Node with ID $nodeId does not exist")
+          sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId does not exist")
       }
   }
 
@@ -164,13 +167,19 @@ object Governor {
 
   case class CreateNodeWithSeedError(message: String) extends CreateNodeWithSeedResponse
 
-  case class GetNodeSuccessor(nodeId: Long) extends Request
+  case class GetNodeIdSet() extends Request
+  
+  sealed trait GetNodeIdSetResponse extends Response
+  
+  case class GetNodeIdSetOk(nodeIds: Set[Long]) extends GetNodeIdSetResponse
 
-  sealed trait GetNodeSuccessorResponse extends Response
+  case class GetNodeSuccessorId(nodeId: Long) extends Request
 
-  case class GetNodeSuccessorOk(successorId: Long) extends GetNodeSuccessorResponse
+  sealed trait GetNodeSuccessorIdResponse extends Response
 
-  case class GetNodeSuccessorError(message: String) extends GetNodeSuccessorResponse
+  case class GetNodeSuccessorIdOk(successorId: Long) extends GetNodeSuccessorIdResponse
+
+  case class GetNodeSuccessorIdError(message: String) extends GetNodeSuccessorIdResponse
 
   def props(idModulus: Int): Props = Props(new Governor(idModulus))
 
