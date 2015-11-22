@@ -29,6 +29,12 @@ object Daemon extends App {
   // terminating nodes, and a WebSocket interface through which events will be published
   private val server = system.actorOf(WebSocketServer.props(governor), "WebSocketServer")
 
+  // Create an actor that will log events published by nodes
+  private val eventWriter = system.actorOf(EventWriter.props, "EventWriter")
+
+  // Subscribe the EventWriter actor to events published by nodes
+  system.eventStream.subscribe(eventWriter, classOf[Event])
+
   // Subscribe the WebSocketServer actor to events published by nodes
   system.eventStream.subscribe(server, classOf[Event])
 
