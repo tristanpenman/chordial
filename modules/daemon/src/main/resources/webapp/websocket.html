@@ -1,36 +1,38 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"/>
-<title>WebSocket Test</title>
-<style type="text/css">
-    body {
-        text-align: center;
-    }
+    <meta charset="utf-8"/>
+    <title>WebSocket Test</title>
+    <style type="text/css">
+        body {
+            text-align: center;
+        }
 
-    svg {
-        border: 1px solid #ccc;
-        padding: 20px;
-    }
+        svg {
+            border: 1px solid #ccc;
+            padding: 20px;
+        }
 
-    path.arc {
-        fill: #fff;
-        stroke: #999;
-    }
+        path.arc {
+            fill: #fff;
+            stroke: #999;
+        }
 
-    path.chord {
-        fill: none;
-        stroke: #336699;
-    }
-</style>
-<script src="lib/d3/d3.js" charset="utf-8"></script>
+        path.chord {
+            fill: none;
+            stroke: #336699;
+        }
+    </style>
+    <script src="lib/d3/d3.js" charset="utf-8"></script>
 </head>
 <body>
-  <h2>Chord Stabilisation Demo</h2>
+<h2>Chord Stabilisation Demo</h2>
 </body>
 <script language="javascript" type="text/javascript">
 
-    var wsUri = "ws://localhost:4567/";
+    var wsUri = "ws://127.0.0.1:4567/";
+
+    var nodesUri = "http://127.0.0.1:4567/nodes";
 
     window.onload = function () {
 
@@ -68,46 +70,72 @@
         var bundle = d3.layout.bundle();
         var hierarchy = d3.layout.hierarchy();
 
-        var websocket = new WebSocket(wsUri);
+        d3.json(nodesUri, function (error, json) {
+            if (error) {
+                alert("Failed to retrieve existing node: " + error)
+            } else {
+                for (var i = 0; i < json.length; i++) {
+                    var node = json[i];
+                    var root = {parent: null, radius: 0};
+                    var source = {value: node.nodeId, radius: radius, parent: root};
+                    var target = {value: node.successorId, radius: radius, parent: root};
+                    root.children = [source, target];
+                    hierarchy(root);
+                    var splines = bundle([
+                        {
+                            source: source,
+                            target: target
+                        }
+                    ]);
 
-        websocket.onopen = function (event) {
-
-        };
-
-        websocket.onclose = function (event) {
-            console.log("Connection closed");
-        };
-
-        websocket.onError = function (event) {
-            console.log(event.data);
-        };
-
-        websocket.onmessage = function (event) {
-            var json = JSON.parse(event.data);
-            if (json.hasOwnProperty('type') && json.type === 'SuccessorUpdated') {
-                var root = {parent: null, radius: 0};
-                var source = {value: json.nodeId, radius: radius, parent: root};
-                var target = {value: json.successorId, radius: radius, parent: root};
-                root.children = [source, target];
-                hierarchy(root);
-                var splines = bundle([
-                    {
-                        source: source,
-                        target: target
+                    var selection = svg.selectAll(".node-" + node.nodeId);
+                    if (selection.size() > 0) {
+                        selection.attr("d", line(splines[0]));
+                    } else {
+                        svg.append("svg:path")
+                                .attr("class", "chord node-" + node.nodeId)
+                                .attr("d", line(splines[0]));
                     }
-                ]);
-
-                // TODO: This can likely be improved using a data() join
-                var selection = svg.selectAll(".node-" + json.nodeId);
-                if (selection.size() > 0) {
-                    selection.attr("d", line(splines[0]));
-                } else {
-                    svg.append("svg:path")
-                            .attr("class", "chord node-" + json.nodeId)
-                            .attr("d", line(splines[0]));
                 }
             }
-        }
+
+            var websocket = new WebSocket(wsUri);
+
+            websocket.onclose = function (event) {
+                console.log("Connection closed");
+            };
+
+            websocket.onError = function (event) {
+                console.log(event.data);
+            };
+
+            websocket.onmessage = function (event) {
+                var json = JSON.parse(event.data);
+                if (json.hasOwnProperty('type') && (json.type === 'SuccessorUpdated' || json.type === 'NodeCreated')) {
+                    var root = {parent: null, radius: 0};
+                    var source = {value: json.nodeId, radius: radius, parent: root};
+                    var target = {value: json.successorId, radius: radius, parent: root};
+                    root.children = [source, target];
+                    hierarchy(root);
+                    var splines = bundle([
+                        {
+                            source: source,
+                            target: target
+                        }
+                    ]);
+
+                    // TODO: This can likely be improved using a data() join
+                    var selection = svg.selectAll(".node-" + json.nodeId);
+                    if (selection.size() > 0) {
+                        selection.attr("d", line(splines[0]));
+                    } else {
+                        svg.append("svg:path")
+                                .attr("class", "chord node-" + json.nodeId)
+                                .attr("d", line(splines[0]));
+                    }
+                }
+            }
+        });
     }
 
 </script>

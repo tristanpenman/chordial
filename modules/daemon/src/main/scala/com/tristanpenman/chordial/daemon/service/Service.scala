@@ -26,7 +26,7 @@ trait Service extends HttpService {
   private type Nodes = Iterable[NodeAttributes]
 
   private def nodeAttributeMap(nodeId: Long, successorId: Long): NodeAttributes =
-    Map("id" -> nodeId, "successor_id" -> successorId)
+    Map("nodeId" -> nodeId, "successorId" -> successorId)
 
   private def getNodeAttributes(nodeId: Long): Future[NodeAttributes] = governor.ask(GetNodeSuccessorId(nodeId))
     .mapTo[GetNodeSuccessorIdResponse]

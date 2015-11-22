@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.daemon.service
 
 import akka.actor._
 import com.tristanpenman.chordial.core.Event
-import com.tristanpenman.chordial.core.Event.{PredecessorUpdated, PredecessorReset, SuccessorUpdated}
+import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorUpdated, PredecessorReset, SuccessorUpdated}
 import spray.can.websocket
 import spray.can.websocket.FrameCommandFailed
 import spray.can.websocket.frame.{TextFrame, BinaryFrame}
@@ -27,6 +27,8 @@ class WebSocketWorker(val serverConnection: ActorRef, val governor: ActorRef)
 
     case e: Event =>
       e match {
+        case NodeCreated(nodeId, successorId) =>
+          send(TextFrame(s"""{ "type": "NodeCreated", "nodeId": $nodeId, "successorId": $successorId }"""))
         case PredecessorReset(nodeId) =>
           send(TextFrame(s"""{ "type": "PredecessorReset", "nodeId": $nodeId }"""))
         case PredecessorUpdated(nodeId, predecessorId) =>

@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.core
 
 import akka.actor._
 import akka.event.EventStream
-import com.tristanpenman.chordial.core.Event.{PredecessorUpdated, PredecessorReset, SuccessorUpdated}
+import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorUpdated, PredecessorReset, SuccessorUpdated}
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 class Node(ownId: Long, seed: NodeInfo, eventStream: EventStream) extends Actor with ActorLogging {
@@ -51,6 +51,8 @@ class Node(ownId: Long, seed: NodeInfo, eventStream: EventStream) extends Actor 
       sender() ! UpdateSuccessorOk()
       eventStream.publish(SuccessorUpdated(ownId, successorId))
   }
+
+  eventStream.publish(NodeCreated(ownId, seed.id))
 
   override def receive: Receive = receiveWhileReady(seed, None)
 }
