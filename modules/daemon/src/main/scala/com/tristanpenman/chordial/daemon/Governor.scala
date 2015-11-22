@@ -1,10 +1,11 @@
 package com.tristanpenman.chordial.daemon
 
 import akka.actor.{Props, Actor, ActorLogging, ActorRef}
-import akka.pattern.ask
+import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Coordinator
 import com.tristanpenman.chordial.core.Coordinator._
+import com.tristanpenman.chordial.core.Node.{GetSuccessorResponse, GetSuccessorOk, GetSuccessor}
 
 import scala.annotation.tailrec
 import scala.concurrent.Await
@@ -23,6 +24,7 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
   private val checkPredecessorTimeout = Timeout(2500.milliseconds)
   private val livenessCheckDuration = 2000.milliseconds
   private val joinRequestTimeout = Timeout(2000.milliseconds)
+  private val getSuccessorRequestTimeout = Timeout(2000.milliseconds)
   private val stabiliseTimeout = Timeout(1500.milliseconds)
 
   private def scheduleCheckPredecessor(nodeRef: ActorRef) =
@@ -118,6 +120,23 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
         case None =>
           sender() ! CreateNodeWithSeedError(s"Node with ID $seedId does not exist")
       }
+
+    case GetNodeSuccessor(nodeId: Long) =>
+      nodes.get(nodeId) match {
+        case Some(nodeRef) =>
+          val getSuccessorRequest = nodeRef.ask(GetSuccessor())(getSuccessorRequestTimeout)
+            .mapTo[GetSuccessorResponse]
+            .map {
+              case GetSuccessorOk(successorId, _) => GetNodeSuccessorOk(successorId)
+            }
+            .recover {
+              case ex => GetNodeSuccessorError(ex.getMessage)
+            }
+            .pipeTo(sender())
+
+        case None =>
+          sender() ! GetNodeSuccessorError(s"Node with ID $nodeId does not exist")
+      }
   }
 
   override def receive: Receive = receiveWithNodes(Map.empty)
@@ -144,6 +163,14 @@ object Governor {
   case class CreateNodeWithSeedOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeWithSeedResponse
 
   case class CreateNodeWithSeedError(message: String) extends CreateNodeWithSeedResponse
+
+  case class GetNodeSuccessor(nodeId: Long) extends Request
+
+  sealed trait GetNodeSuccessorResponse extends Response
+
+  case class GetNodeSuccessorOk(successorId: Long) extends GetNodeSuccessorResponse
+
+  case class GetNodeSuccessorError(message: String) extends GetNodeSuccessorResponse
 
   def props(idModulus: Int): Props = Props(new Governor(idModulus))
 

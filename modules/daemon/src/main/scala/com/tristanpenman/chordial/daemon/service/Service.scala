@@ -18,34 +18,54 @@ trait Service extends HttpService {
 
   protected def governor: ActorRef
 
-  val routes = path("") {
-    post {
-      parameters('seed_id.?) { (maybeSeedId) =>
+  val routes = pathPrefix("nodes") {
+    pathEnd {
+      post {
+        parameters('seed_id.?) { (maybeSeedId) =>
+          respondWithMediaType(`text/plain`) {
+            complete {
+              ToResponseMarshallable.isMarshallable(
+                maybeSeedId match {
+                  case Some(seedId) =>
+                    governor.ask(CreateNodeWithSeed(seedId.toLong))
+                      .mapTo[CreateNodeWithSeedResponse]
+                      .map {
+                        case CreateNodeWithSeedOk(nodeId, nodeRef) => nodeId.toString
+                        case CreateNodeWithSeedError(message) => message
+                      }
+                      .recover {
+                        case ex => ex.getMessage
+                      }
+                  case None =>
+                    governor.ask(CreateNode())
+                      .mapTo[CreateNodeResponse]
+                      .map {
+                        case CreateNodeOk(nodeId, nodeRef) => nodeId.toString
+                        case CreateNodeError(message) => message
+                      }
+                      .recover {
+                        case ex => ex.getMessage
+                      }
+                }
+              )
+            }
+          }
+        }
+      }
+    } ~ path(IntNumber) { nodeId =>
+      get {
         respondWithMediaType(`text/plain`) {
           complete {
             ToResponseMarshallable.isMarshallable(
-              maybeSeedId match {
-                case Some(seedId) =>
-                  governor.ask(CreateNodeWithSeed(seedId.toLong))
-                    .mapTo[CreateNodeWithSeedResponse]
-                    .map {
-                      case CreateNodeWithSeedOk(nodeId, nodeRef) => nodeId.toString
-                      case CreateNodeWithSeedError(message) => message
-                    }
-                    .recover {
-                      case ex => ex.getMessage
-                    }
-                case None =>
-                  governor.ask(CreateNode())
-                    .mapTo[CreateNodeResponse]
-                    .map {
-                      case CreateNodeOk(nodeId, nodeRef) => nodeId.toString
-                      case CreateNodeError(message) => message
-                    }
-                    .recover {
-                      case ex => ex.getMessage
-                    }
-              }
+              governor.ask(GetNodeSuccessor(nodeId))
+                .mapTo[GetNodeSuccessorResponse]
+                .map {
+                  case GetNodeSuccessorOk(successorId) => successorId.toString
+                  case GetNodeSuccessorError(message) => message
+                }
+                .recover {
+                  case ex => ex.getMessage
+                }
             )
           }
         }
