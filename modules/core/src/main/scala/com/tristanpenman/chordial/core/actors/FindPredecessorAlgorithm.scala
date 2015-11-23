@@ -1,6 +1,7 @@
 package com.tristanpenman.chordial.core.actors
 
 import akka.actor.{ActorLogging, ActorRef, Actor, Props}
+import com.tristanpenman.chordial.core.Coordinator._
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.Interval
 

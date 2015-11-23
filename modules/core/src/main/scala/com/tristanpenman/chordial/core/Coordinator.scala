@@ -5,6 +5,7 @@ import akka.event.EventStream
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.actors.CheckPredecessorAlgorithm._
+import com.tristanpenman.chordial.core.actors.ClosestPrecedingFingerAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.NotifyAlgorithm._
@@ -46,6 +47,26 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
         case exception =>
           log.error(exception.getMessage)
           CheckPredecessorError("CheckPredecessor request failed due to internal error")
+      }
+      .pipeTo(replyTo)
+  }
+
+  private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef, timeout: Timeout) = {
+    val algorithm = context.actorOf(ClosestPrecedingFingerAlgorithm.props())
+    algorithm.ask(ClosestPrecedingFingerAlgorithmStart(queryId, NodeInfo(nodeId, self), nodeRef))(timeout)
+      .mapTo[ClosestPrecedingFingerAlgorithmStartResponse]
+      .map {
+        case ClosestPrecedingFingerAlgorithmOk(fingerId, fingerRef) =>
+          ClosestPrecedingFingerOk(fingerId, fingerRef)
+        case ClosestPrecedingFingerAlgorithmAlreadyRunning() =>
+          throw new Exception("ClosestPrecedingFingerAlgorithm actor already running")
+        case ClosestPrecedingFingerAlgorithmError(message) =>
+          ClosestPrecedingFingerError(message)
+      }
+      .recover {
+        case exception =>
+          context.stop(algorithm)
+          ClosestPrecedingFingerError(exception.getMessage)
       }
       .pipeTo(replyTo)
   }
@@ -161,7 +182,7 @@ class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: 
       checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender(), requestTimeout)
 
     case m@ClosestPrecedingFinger(queryId: Long) =>
-      nodeRef.ask(m)(requestTimeout).pipeTo(sender())
+      closestPrecedingFinger(nodeRef, queryId, sender(), requestTimeout)
 
     case m@GetId() =>
       nodeRef.ask(m)(requestTimeout).pipeTo(sender())
@@ -212,6 +233,14 @@ object Coordinator {
   case class CheckPredecessorOk() extends CheckPredecessorResponse
 
   case class CheckPredecessorError(message: String) extends CheckPredecessorResponse
+
+  case class ClosestPrecedingFinger(queryId: Long) extends Request
+
+  sealed trait ClosestPrecedingFingerResponse extends Response
+
+  case class ClosestPrecedingFingerOk(nodeId: Long, nodeRef: ActorRef) extends ClosestPrecedingFingerResponse
+
+  case class ClosestPrecedingFingerError(message: String) extends ClosestPrecedingFingerResponse
 
   case class FindPredecessor(queryId: Long) extends Request
 

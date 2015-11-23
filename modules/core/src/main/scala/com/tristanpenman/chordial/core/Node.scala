@@ -2,26 +2,14 @@ package com.tristanpenman.chordial.core
 
 import akka.actor._
 import akka.event.EventStream
-import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorUpdated, PredecessorReset, SuccessorUpdated}
-import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
+import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorUpdated}
+import com.tristanpenman.chordial.core.shared.NodeInfo
 
 class Node(ownId: Long, seed: NodeInfo, eventStream: EventStream) extends Actor with ActorLogging {
 
   import Node._
 
-  //noinspection ScalaStyle
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo]): Receive = {
-    case ClosestPrecedingFinger(queryId) =>
-      // Simplified version of the closest-preceding-finger algorithm that does not use a finger table. We first check
-      // whether the closest known successor lies in the interval beginning immediately after the current node and
-      // ending immediately before the query ID - this corresponds to the case where the successor node is the current
-      // node's closest known predecessor for the query ID. Otherwise, the current node is the closest predecessor.
-      if (Interval(ownId + 1, queryId).contains(successor.id)) {
-        sender() ! ClosestPrecedingFingerOk(successor.id, successor.ref)
-      } else {
-        sender() ! ClosestPrecedingFingerOk(ownId, self)
-      }
-
     case GetId() =>
       sender() ! GetIdOk(ownId)
 
@@ -62,14 +50,6 @@ object Node {
   sealed trait Request
 
   sealed trait Response
-
-  case class ClosestPrecedingFinger(queryId: Long) extends Request
-
-  sealed trait ClosestPrecedingFingerResponse extends Response
-
-  case class ClosestPrecedingFingerOk(nodeId: Long, nodeRef: ActorRef) extends ClosestPrecedingFingerResponse
-
-  case class ClosestPrecedingFingerError(message: String) extends ClosestPrecedingFingerResponse
 
   case class GetId() extends Request
 
