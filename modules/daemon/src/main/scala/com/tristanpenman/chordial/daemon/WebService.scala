@@ -76,8 +76,11 @@ trait WebService extends HttpService {
                       .map {
                         case CreateNodeWithSeedOk(nodeId, nodeRef) =>
                           nodeAttributeMap(nodeId, seedId.toLong).toJson.compactPrint
-                        case CreateNodeWithSeedError(message) =>
+                        case CreateNodeWithSeedInternalError(message) =>
                           throw new Exception(message)
+                        case CreateNodeWithSeedInvalidRequest(message) =>
+                          respondWithStatus(StatusCodes.BadRequest)
+                          message
                       }
                   case None =>
                     governor.ask(CreateNode())
@@ -85,8 +88,11 @@ trait WebService extends HttpService {
                       .map {
                         case CreateNodeOk(nodeId, nodeRef) =>
                           nodeAttributeMap(nodeId, nodeId).toJson.compactPrint
-                        case CreateNodeError(message) =>
+                        case CreateNodeInternalError(message) =>
                           throw new Exception(message)
+                        case CreateNodeInvalidRequest(message) =>
+                          respondWithStatus(StatusCodes.BadRequest)
+                          message
                       }
                 }
               )

@@ -92,39 +92,43 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
           checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
         sender() ! CreateNodeOk(nodeId, nodeRef)
       } else {
-        sender() ! CreateNodeError(s"Maximum of $idModulus Chord nodes already running")
+        sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already running")
       }
 
     case CreateNodeWithSeed(seedId) =>
       nodes.get(seedId) match {
         case Some(seedRef) =>
-          val nodeId = generateUniqueId(nodes.keySet)
-          val nodeRef = createNode(nodeId)
-          val joinRequest = nodeRef.ask(Join(seedId, seedRef))(joinRequestTimeout)
-            .mapTo[JoinResponse]
-            .map {
-              case JoinOk() => Success(())
-              case JoinError(message) => throw new Exception(message)
-            }
-            .recover {
-              case ex => Failure(ex)
-            }
+          if (nodes.size < idModulus) {
+            val nodeId = generateUniqueId(nodes.keySet)
+            val nodeRef = createNode(nodeId)
+            val joinRequest = nodeRef.ask(Join(seedId, seedRef))(joinRequestTimeout)
+              .mapTo[JoinResponse]
+              .map {
+                case JoinOk() => Success(())
+                case JoinError(message) => throw new Exception(message)
+              }
+              .recover {
+                case ex => Failure(ex)
+              }
 
-          Await.result(joinRequest, Duration.Inf) match {
-            case Success(()) =>
-              val stabilisationCancellable = scheduleStabilisation(nodeRef)
-              val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
-              context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
-                stabilisationCancellables + (nodeId -> stabilisationCancellable),
-                checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
-              sender() ! CreateNodeWithSeedOk(nodeId, nodeRef)
-            case Failure(ex) =>
-              context.stop(nodeRef)
-              sender() ! CreateNodeWithSeedError(ex.getMessage)
+            Await.result(joinRequest, Duration.Inf) match {
+              case Success(()) =>
+                val stabilisationCancellable = scheduleStabilisation(nodeRef)
+                val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
+                context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
+                  stabilisationCancellables + (nodeId -> stabilisationCancellable),
+                  checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
+                sender() ! CreateNodeWithSeedOk(nodeId, nodeRef)
+              case Failure(ex) =>
+                context.stop(nodeRef)
+                sender() ! CreateNodeWithSeedInternalError(ex.getMessage)
+            }
+          } else {
+            sender() ! CreateNodeWithSeedInvalidRequest(s"Maximum of $idModulus Chord nodes already running")
           }
 
         case None =>
-          sender() ! CreateNodeWithSeedError(s"Node with ID $seedId does not exist")
+          sender() ! CreateNodeWithSeedInvalidRequest(s"Node with ID $seedId does not exist")
       }
 
     case GetNodeIdSet() =>
@@ -176,16 +180,20 @@ object Governor {
   sealed trait CreateNodeResponse extends Response
 
   case class CreateNodeOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeResponse
+  
+  case class CreateNodeInternalError(message: String) extends CreateNodeResponse
 
-  case class CreateNodeError(message: String) extends CreateNodeResponse
-
+  case class CreateNodeInvalidRequest(message: String) extends CreateNodeResponse
+  
   case class CreateNodeWithSeed(seedId: Long) extends Request
 
   sealed trait CreateNodeWithSeedResponse extends Response
 
   case class CreateNodeWithSeedOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeWithSeedResponse
+  
+  case class CreateNodeWithSeedInternalError(message: String) extends CreateNodeWithSeedResponse
 
-  case class CreateNodeWithSeedError(message: String) extends CreateNodeWithSeedResponse
+  case class CreateNodeWithSeedInvalidRequest(message: String) extends CreateNodeWithSeedResponse
 
   case class GetNodeIdSet() extends Request
 
