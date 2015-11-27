@@ -30,6 +30,12 @@
 </body>
 <script language="javascript" type="text/javascript">
 
+    d3.selection.prototype.moveToFront = function() {
+        return this.each(function(){
+            this.parentNode.appendChild(this);
+        });
+    };
+
     var wsUri = "ws://127.0.0.1:4567/";
 
     var nodesUri = "http://127.0.0.1:4567/nodes";
@@ -53,9 +59,11 @@
                 .append("svg:g")
                 .attr("transform", "translate(" + radius + "," + radius + ")");
 
+        var arc = d3.svg.arc();
+
         svg.append("svg:path")
                 .attr("class", "arc")
-                .attr("d", d3.svg.arc().outerRadius(radius).innerRadius(0).startAngle(0).endAngle(2 * Math.PI));
+                .attr("d", arc.outerRadius(radius).innerRadius(0).startAngle(0).endAngle(2 * Math.PI));
 
         var line = d3.svg.line.radial()
                 .interpolate("bundle")
@@ -64,7 +72,7 @@
                     return d.radius;
                 })
                 .angle(function (d) {
-                    return d.value / 180 * Math.PI;
+                    return d.value * 3 / 180 * Math.PI;
                 });
 
         var bundle = d3.layout.bundle();
@@ -76,6 +84,15 @@
             } else {
                 for (var i = 0; i < json.length; i++) {
                     var node = json[i];
+
+                    var x = radius * Math.cos((node.nodeId * 3 - 90) / 180 * Math.PI);
+                    var y = radius * Math.sin((node.nodeId * 3 - 90) / 180 * Math.PI);
+
+                    svg.append("svg:path")
+                            .attr("class", "arc node node-" + node.nodeId)
+                            .attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
+                            .attr("transform", "translate(" + x + "," + y + ")");
+
                     var root = {parent: null, radius: 0};
                     var source = {value: node.nodeId, radius: radius, parent: root};
                     var target = {value: node.successorId, radius: radius, parent: root};
@@ -88,14 +105,11 @@
                         }
                     ]);
 
-                    var selection = svg.selectAll(".node-" + node.nodeId);
-                    if (selection.size() > 0) {
-                        selection.attr("d", line(splines[0]));
-                    } else {
-                        svg.append("svg:path")
-                                .attr("class", "chord node-" + node.nodeId)
-                                .attr("d", line(splines[0]));
-                    }
+                    svg.append("svg:path")
+                            .attr("class", "chord node-" + node.nodeId + "-successor")
+                            .attr("d", line(splines[0]));
+
+                    svg.selectAll(".node").moveToFront();
                 }
             }
 
@@ -112,6 +126,21 @@
             websocket.onmessage = function (event) {
                 var json = JSON.parse(event.data);
                 if (json.hasOwnProperty('type') && (json.type === 'SuccessorUpdated' || json.type === 'NodeCreated')) {
+
+                    var x = radius * Math.cos((json.nodeId * 3 - 90) / 180 * Math.PI);
+                    var y = radius * Math.sin((json.nodeId * 3 - 90) / 180 * Math.PI);
+
+                    var selection = svg.selectAll(".node-" + json.nodeId);
+                    if (selection.size() > 0) {
+                        selection.attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
+                                .attr("transform", "translate(" + x + "," + y + ")");
+                    } else {
+                        svg.append("svg:path")
+                                .attr("class", "arc node node-" + json.nodeId)
+                                .attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
+                                .attr("transform", "translate(" + x + "," + y + ")");
+                    }
+
                     var root = {parent: null, radius: 0};
                     var source = {value: json.nodeId, radius: radius, parent: root};
                     var target = {value: json.successorId, radius: radius, parent: root};
@@ -125,14 +154,16 @@
                     ]);
 
                     // TODO: This can likely be improved using a data() join
-                    var selection = svg.selectAll(".node-" + json.nodeId);
+                    selection = svg.selectAll(".node-" + json.nodeId + "-successor");
                     if (selection.size() > 0) {
                         selection.attr("d", line(splines[0]));
                     } else {
                         svg.append("svg:path")
-                                .attr("class", "chord node-" + json.nodeId)
+                                .attr("class", "chord node-" + json.nodeId + "-successor")
                                 .attr("d", line(splines[0]));
                     }
+
+                    svg.selectAll(".node").moveToFront();
                 }
             }
         });

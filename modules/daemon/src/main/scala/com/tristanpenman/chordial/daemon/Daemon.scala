@@ -19,7 +19,7 @@ object Daemon extends App {
 
   // Generate IDs ranging from 0 to 359 (inclusive) so that when visualising the network,
   // each node can be represented as a one degree arc on the ring
-  private val idModulus = 360
+  private val idModulus = 120
 
   // Create an actor that is responsible for creating and terminating nodes, while ensuring
   // that nodes are assigned unique IDs in the Chord key-space
