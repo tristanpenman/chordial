@@ -46,6 +46,11 @@
 
         var radius = Math.min(w, h) / 2;
 
+        // With a key-space that wraps back around to zero from 64, each node will
+        // represent a ~5.625 degree arc on the ring
+        var keyspaceModulus = 64;
+        var keyspaceFactor = 360 / keyspaceModulus;
+
         // Chrome 15 bug: <http://code.google.com/p/chromium/issues/detail?id=98951>
         var div = d3.select("body").append("div")
                 .style("width", w + "px")
@@ -72,7 +77,7 @@
                     return d.radius;
                 })
                 .angle(function (d) {
-                    return d.value * 3 / 180 * Math.PI;
+                    return d.value * keyspaceFactor / 180 * Math.PI;
                 });
 
         var bundle = d3.layout.bundle();
@@ -85,8 +90,8 @@
                 for (var i = 0; i < json.length; i++) {
                     var node = json[i];
 
-                    var x = radius * Math.cos((node.nodeId * 3 - 90) / 180 * Math.PI);
-                    var y = radius * Math.sin((node.nodeId * 3 - 90) / 180 * Math.PI);
+                    var x = radius * Math.cos((node.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
+                    var y = radius * Math.sin((node.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
 
                     svg.append("svg:path")
                             .attr("class", "arc node node-" + node.nodeId)
@@ -127,8 +132,8 @@
                 var json = JSON.parse(event.data);
                 if (json.hasOwnProperty('type') && (json.type === 'SuccessorUpdated' || json.type === 'NodeCreated')) {
 
-                    var x = radius * Math.cos((json.nodeId * 3 - 90) / 180 * Math.PI);
-                    var y = radius * Math.sin((json.nodeId * 3 - 90) / 180 * Math.PI);
+                    var x = radius * Math.cos((json.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
+                    var y = radius * Math.sin((json.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
 
                     var selection = svg.selectAll(".node-" + json.nodeId);
                     if (selection.size() > 0) {

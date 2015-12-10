@@ -17,9 +17,9 @@ object Daemon extends App {
 
   implicit val timeout: Timeout = 3.seconds
 
-  // Generate IDs ranging from 0 to 359 (inclusive) so that when visualising the network,
-  // each node can be represented as a one degree arc on the ring
-  private val idModulus = 120
+  // Generate IDs ranging from 0 to 63 (inclusive) so that when visualising the network,
+  // each node represents a ~5.625 degree arc on the ring
+  private val idModulus = 64
 
   // Create an actor that is responsible for creating and terminating nodes, while ensuring
   // that nodes are assigned unique IDs in the Chord key-space
