@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.core
 
 import akka.actor._
 import akka.event.EventStream
-import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorUpdated}
+import com.tristanpenman.chordial.core.Event._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream) extends Actor with ActorLogging {
@@ -22,7 +22,10 @@ class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStr
   require(seed.id >= 0, "seed.id must be non-negative Long value")
   require(seed.id < idModulus, s"seed.id must be less than $idModulus (2^$keyspaceBits})")
 
-  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo]): Receive = {
+  private val newFingerTable = Vector.fill(keyspaceBits - 1){None}
+
+  private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo],
+                                fingerTable: Vector[Option[NodeInfo]]): Receive = {
     case GetId() =>
       sender() ! GetIdOk(ownId)
 
@@ -37,25 +40,45 @@ class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStr
     case GetSuccessor() =>
       sender() ! GetSuccessorOk(successor.id, successor.ref)
 
+    case ResetFinger(index: Int) =>
+      if (index < 1 || index >= keyspaceBits) {
+        sender() ! ResetFingerInvalidRequest("Invalid finger table index")
+      } else {
+        context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index - 1, None)))
+        sender() ! ResetFingerOk()
+        eventStream.publish(FingerReset(ownId, index))
+      }
+
     case ResetPredecessor() =>
-      context.become(receiveWhileReady(successor, None))
+      context.become(receiveWhileReady(successor, None, fingerTable))
       sender() ! ResetPredecessorOk()
       eventStream.publish(PredecessorReset(ownId))
 
+    case UpdateFinger(index: Int, finger: NodeInfo) =>
+      if (index < 1 || index >= keyspaceBits) {
+        sender() ! UpdateFingerInvalidRequest("Invalid finger table index")
+      } else if (finger.id < 0 || finger.id >= idModulus) {
+        sender() ! UpdateFingerInvalidRequest("Invalid finger ID")
+      } else {
+        context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index - 1, Some(finger))))
+        sender() ! UpdateFingerOk()
+        eventStream.publish(FingerUpdated(ownId, index, finger.id))
+      }
+
     case UpdatePredecessor(predecessorId, predecessorRef) =>
-      context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef))))
+      context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef)), fingerTable))
       sender() ! UpdatePredecessorOk()
       eventStream.publish(PredecessorUpdated(ownId, predecessorId))
 
     case UpdateSuccessor(successorId, successorRef) =>
-      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor))
+      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, fingerTable))
       sender() ! UpdateSuccessorOk()
       eventStream.publish(SuccessorUpdated(ownId, successorId))
   }
 
   eventStream.publish(NodeCreated(ownId, seed.id))
 
-  override def receive: Receive = receiveWhileReady(seed, None)
+  override def receive: Receive = receiveWhileReady(seed, None, newFingerTable)
 }
 
 object Node {
@@ -89,6 +112,22 @@ object Node {
   sealed trait ResetPredecessorResponse extends Response
 
   case class ResetPredecessorOk() extends ResetPredecessorResponse
+
+  case class ResetFinger(index: Int) extends Request
+
+  sealed trait ResetFingerResponse extends Response
+
+  case class ResetFingerOk() extends ResetFingerResponse
+
+  case class ResetFingerInvalidRequest(message: String) extends ResetFingerResponse
+
+  case class UpdateFinger(index: Int, finger: NodeInfo) extends Request
+
+  sealed trait UpdateFingerResponse extends Response
+
+  case class UpdateFingerOk() extends UpdateFingerResponse
+
+  case class UpdateFingerInvalidRequest(message: String) extends UpdateFingerResponse
 
   case class UpdatePredecessor(predecessorId: Long, predecessorRef: ActorRef) extends Request
 
