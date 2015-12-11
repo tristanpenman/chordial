@@ -11,6 +11,8 @@ with BeforeAndAfterAll {
 
   def this() = this(ActorSystem("NodeSpec"))
 
+  val keyspaceBits = 3
+
   override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
@@ -20,7 +22,7 @@ with BeforeAndAfterAll {
     val seedId = 2L
     val seedRef = self
 
-    val node: ActorRef = system.actorOf(Node.props(ownId, NodeInfo(seedId, seedRef), system.eventStream))
+    val node: ActorRef = system.actorOf(Node.props(ownId, keyspaceBits, NodeInfo(seedId, seedRef), system.eventStream))
 
     "respond to a GetId message with a GetIdOk message containing its ID" in {
       node ! GetId()

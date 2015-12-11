@@ -19,11 +19,11 @@ object Daemon extends App {
 
   // Generate IDs ranging from 0 to 63 (inclusive) so that when visualising the network,
   // each node represents a ~5.625 degree arc on the ring
-  private val idModulus = 64
+  private val keyspaceBits = 6
 
   // Create an actor that is responsible for creating and terminating nodes, while ensuring
   // that nodes are assigned unique IDs in the Chord key-space
-  private val governor = system.actorOf(Governor.props(idModulus), "Governor")
+  private val governor = system.actorOf(Governor.props(keyspaceBits), "Governor")
 
   // Create a web server that will provide both a simple RESTful API for creating and
   // terminating nodes, and a WebSocket interface through which events will be published

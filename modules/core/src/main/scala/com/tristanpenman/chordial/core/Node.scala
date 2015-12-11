@@ -5,9 +5,22 @@ import akka.event.EventStream
 import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorUpdated}
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
-class Node(ownId: Long, seed: NodeInfo, eventStream: EventStream) extends Actor with ActorLogging {
+class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream) extends Actor with ActorLogging {
 
   import Node._
+
+  // Check that space is reasonable
+  require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
+
+  private val idModulus = 1 << keyspaceBits
+
+  // Check that node ID is reasonable
+  require(ownId >= 0, "ownId must be a non-negative Long value")
+  require(ownId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
+
+  // Check that seed ID is reasonable
+  require(seed.id >= 0, "seed.id must be non-negative Long value")
+  require(seed.id < idModulus, s"seed.id must be less than $idModulus (2^$keyspaceBits})")
 
   private def receiveWhileReady(successor: NodeInfo, predecessor: Option[NodeInfo]): Receive = {
     case GetId() =>
@@ -89,5 +102,6 @@ object Node {
 
   case class UpdateSuccessorOk() extends UpdateSuccessorResponse
 
-  def props(ownId: Long, seed: NodeInfo, eventStream: EventStream): Props = Props(new Node(ownId, seed, eventStream))
+  def props(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream): Props =
+    Props(new Node(ownId, keyspaceBits, seed, eventStream))
 }

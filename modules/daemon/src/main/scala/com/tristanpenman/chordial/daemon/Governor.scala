@@ -10,15 +10,18 @@ import com.tristanpenman.chordial.core.Node.{GetSuccessorResponse, GetSuccessorO
 import scala.annotation.tailrec
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.util.{Failure, Success, Random}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class Governor(val idModulus: Int) extends Actor with ActorLogging {
+class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
   import Governor._
 
-  require(idModulus > 0, "idModulus must be a positive Int value")
+  require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
+
+  private val idModulus = 1 << keyspaceBits
 
   private val requestTimeout = Timeout(4000.milliseconds)
   private val checkPredecessorTimeout = Timeout(2500.milliseconds)
@@ -64,7 +67,7 @@ class Governor(val idModulus: Int) extends Actor with ActorLogging {
     }
 
   private def createNode(nodeId: Long): ActorRef = {
-    context.system.actorOf(Coordinator.props(nodeId, requestTimeout, livenessCheckDuration,
+    context.system.actorOf(Coordinator.props(nodeId, keyspaceBits, requestTimeout, livenessCheckDuration,
       context.system.eventStream))
   }
 
@@ -217,6 +220,6 @@ object Governor {
 
   case class TerminateNodeResponseError(message: String) extends TerminateNodeResponse
 
-  def props(idModulus: Int): Props = Props(new Governor(idModulus))
+  def props(keyspaceBits: Int): Props = Props(new Governor(keyspaceBits))
 
 }

@@ -16,14 +16,17 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
-class Coordinator(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration, eventStream: EventStream)
+class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, livenessCheckDuration: Duration,
+                  eventStream: EventStream)
   extends Actor with ActorLogging {
 
   import Coordinator._
   import Node._
 
+  require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
+
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
-    context.actorOf(Node.props(nodeId, NodeInfo(seedId, seedRef), eventStream))
+    context.actorOf(Node.props(nodeId, keyspaceBits, NodeInfo(seedId, seedRef), eventStream))
 
   private def newCheckPredecessorAlgorithm() =
     context.actorOf(CheckPredecessorAlgorithm.props())
@@ -288,6 +291,7 @@ object Coordinator {
 
   case class StabiliseError(message: String) extends StabiliseResponse
 
-  def props(nodeId: Long, requestTimeout: Timeout, livenessCheckDuration: Duration, eventStream: EventStream): Props =
-    Props(new Coordinator(nodeId, requestTimeout, livenessCheckDuration, eventStream))
+  def props(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, livenessCheckDuration: Duration,
+            eventStream: EventStream): Props =
+    Props(new Coordinator(nodeId, keyspaceBits, requestTimeout, livenessCheckDuration, eventStream))
 }
