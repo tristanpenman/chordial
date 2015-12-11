@@ -66,14 +66,22 @@ class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStr
       }
 
     case UpdatePredecessor(predecessorId, predecessorRef) =>
-      context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef)), fingerTable))
-      sender() ! UpdatePredecessorOk()
-      eventStream.publish(PredecessorUpdated(ownId, predecessorId))
+      if (predecessorId < 0 && predecessorId >= idModulus) {
+        sender() ! UpdatePredecessorInvalidRequest("Invalid predecessor ID")
+      } else {
+        context.become(receiveWhileReady(successor, Some(NodeInfo(predecessorId, predecessorRef)), fingerTable))
+        sender() ! UpdatePredecessorOk()
+        eventStream.publish(PredecessorUpdated(ownId, predecessorId))
+      }
 
     case UpdateSuccessor(successorId, successorRef) =>
-      context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, fingerTable))
-      sender() ! UpdateSuccessorOk()
-      eventStream.publish(SuccessorUpdated(ownId, successorId))
+      if (successorId < 0 || successorId >= idModulus) {
+        sender() ! UpdateSuccessorInvalidRequest("Invalid successor ID")
+      } else {
+        context.become(receiveWhileReady(NodeInfo(successorId, successorRef), predecessor, fingerTable))
+        sender() ! UpdateSuccessorOk()
+        eventStream.publish(SuccessorUpdated(ownId, successorId))
+      }
   }
 
   eventStream.publish(NodeCreated(ownId, seed.id))
@@ -135,11 +143,15 @@ object Node {
 
   case class UpdatePredecessorOk() extends UpdatePredecessorResponse
 
+  case class UpdatePredecessorInvalidRequest(message: String) extends UpdatePredecessorResponse
+
   case class UpdateSuccessor(successorId: Long, successorRef: ActorRef) extends Request
 
   sealed trait UpdateSuccessorResponse extends Response
 
   case class UpdateSuccessorOk() extends UpdateSuccessorResponse
+
+  case class UpdateSuccessorInvalidRequest(message: String) extends UpdateSuccessorResponse
 
   def props(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream): Props =
     Props(new Node(ownId, keyspaceBits, seed, eventStream))
