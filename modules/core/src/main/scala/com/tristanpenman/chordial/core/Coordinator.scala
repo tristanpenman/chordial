@@ -25,6 +25,12 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
 
+  private val idModulus = 1 << keyspaceBits
+
+  // Check that node ID is reasonable
+  require(nodeId >= 0, "ownId must be a non-negative Long value")
+  require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
+
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
     context.actorOf(Node.props(nodeId, keyspaceBits, NodeInfo(seedId, seedRef), eventStream))
 
