@@ -55,12 +55,16 @@ class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStr
       eventStream.publish(PredecessorReset(ownId))
 
     case UpdateFinger(index: Int, finger: NodeInfo) =>
-      if (index < 1 || index >= keyspaceBits) {
+      if (index < 0 || index >= keyspaceBits) {
         sender() ! UpdateFingerInvalidRequest("Invalid finger table index")
       } else if (finger.id < 0 || finger.id >= idModulus) {
         sender() ! UpdateFingerInvalidRequest("Invalid finger ID")
       } else {
-        context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index - 1, Some(finger))))
+        if (index == 0) {
+          context.become(receiveWhileReady(finger, predecessor, fingerTable))
+        } else {
+          context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index - 1, Some(finger))))
+        }
         sender() ! UpdateFingerOk()
         eventStream.publish(FingerUpdated(ownId, index, finger.id))
       }
