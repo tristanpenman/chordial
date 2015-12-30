@@ -25,6 +25,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
   private val requestTimeout = Timeout(4000.milliseconds)
   private val checkPredecessorTimeout = Timeout(2500.milliseconds)
+  private val fixFingersTimeout = Timeout(3000.milliseconds)
   private val livenessCheckDuration = 2000.milliseconds
   private val joinRequestTimeout = Timeout(2000.milliseconds)
   private val getSuccessorRequestTimeout = Timeout(2000.milliseconds)
@@ -46,6 +47,25 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
           case util.Failure(exception) =>
             log.error("CheckPredecessor (requested for {}) failed with an exception: {}", nodeRef.path, exception)
         }
+    }
+
+  private def scheduleFixFingers(nodeRef: ActorRef) =
+    context.system.scheduler.schedule(500.milliseconds, 500.milliseconds) {
+      nodeRef.ask(FixFingers())(fixFingersTimeout)
+        .mapTo[FixFingersResponse]
+        .onComplete {
+          case util.Success(result) => result match {
+            case FixFingersOk() =>
+              log.debug("FixFingers (requested for {}) finished successfully", nodeRef.path)
+            case FixFingersInProgress() =>
+              log.debug("FixFingers (requested for {}) already in progress", nodeRef.path)
+            case FixFingersError(message) =>
+              log.debug("FixFingers (requested for {}) finished with error: {}", nodeRef.path, message)
+          }
+          case util.Failure(exception) =>
+            log.error("FixFingers (requested for {}) failed with an exception: {}", nodeRef.path, exception)
+        }
+
     }
 
   private def scheduleStabilisation(nodeRef: ActorRef) =
@@ -83,16 +103,19 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
   private def receiveWithNodes(nodes: Map[Long, ActorRef],
                                stabilisationCancellables: Map[Long, Cancellable],
-                               checkPredecessorCancellables: Map[Long, Cancellable]): Receive = {
+                               checkPredecessorCancellables: Map[Long, Cancellable],
+                               fixFingersCancellables: Map[Long, Cancellable]): Receive = {
     case CreateNode() =>
       if (nodes.size < idModulus) {
         val nodeId = generateUniqueId(nodes.keySet)
         val nodeRef = createNode(nodeId)
         val stabilisationCancellable = scheduleStabilisation(nodeRef)
         val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
+        val fixFingersCancellable = scheduleFixFingers(nodeRef)
         context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
           stabilisationCancellables + (nodeId -> stabilisationCancellable),
-          checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
+          checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
+          fixFingersCancellables + (nodeId -> fixFingersCancellable)))
         sender() ! CreateNodeOk(nodeId, nodeRef)
       } else {
         sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already running")
@@ -118,9 +141,11 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
               case Success(()) =>
                 val stabilisationCancellable = scheduleStabilisation(nodeRef)
                 val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
+                val fixFingersCancellable = scheduleFixFingers(nodeRef)
                 context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
                   stabilisationCancellables + (nodeId -> stabilisationCancellable),
-                  checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable)))
+                  checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
+                  fixFingersCancellables + (nodeId -> fixFingersCancellable)))
                 sender() ! CreateNodeWithSeedOk(nodeId, nodeRef)
               case Failure(ex) =>
                 context.stop(nodeRef)
@@ -159,9 +184,10 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
         case Some(nodeRef) =>
           checkPredecessorCancellables.get(nodeId).foreach(_.cancel())
           stabilisationCancellables.get(nodeId).foreach(_.cancel())
+          fixFingersCancellables.get(nodeId).foreach(_.cancel())
           context.stop(nodeRef)
           context.become(receiveWithNodes(nodes - nodeId, stabilisationCancellables - nodeId,
-            checkPredecessorCancellables - nodeId))
+            checkPredecessorCancellables - nodeId, fixFingersCancellables - nodeId))
           sender() ! TerminateNodeResponseOk()
 
         case None =>
@@ -169,7 +195,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
       }
   }
 
-  override def receive: Receive = receiveWithNodes(Map.empty, Map.empty, Map.empty)
+  override def receive: Receive = receiveWithNodes(Map.empty, Map.empty, Map.empty, Map.empty)
 }
 
 object Governor {

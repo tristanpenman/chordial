@@ -282,6 +282,8 @@ object Coordinator {
 
   case class FixFingersOk() extends FixFingersResponse
 
+  case class FixFingersInProgress() extends FixFingersResponse
+
   case class FixFingersError(message: String) extends FixFingersResponse
 
   case class Join(seedId: Long, seedRef: ActorRef) extends Request
