@@ -134,6 +134,10 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
       .pipeTo(sender)
   }
 
+  private def fixFingers(sender: ActorRef, algorithmTimeout: Timeout): Unit = {
+    sender ! FixFingersError("FixFingers request handler not implemented")
+  }
+
   private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef, timeout: Timeout) = {
     val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
     notifyAlgorithm.ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(timeout)
@@ -202,6 +206,9 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
     case FindSuccessor(queryId) =>
       findSuccessor(queryId, sender(), requestTimeout)
 
+    case FixFingers() =>
+      fixFingers(sender(), requestTimeout)
+
     case Join(seedId, seedRef) =>
       context.stop(nodeRef)
       context.stop(checkPredecessorAlgorithm)
@@ -262,6 +269,14 @@ object Coordinator {
     extends FindSuccessorResponse
 
   case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
+
+  case class FixFingers() extends Request
+
+  sealed trait FixFingersResponse extends Response
+
+  case class FixFingersOk() extends FixFingersResponse
+
+  case class FixFingersError(message: String) extends FixFingersResponse
 
   case class Join(seedId: Long, seedRef: ActorRef) extends Request
 
