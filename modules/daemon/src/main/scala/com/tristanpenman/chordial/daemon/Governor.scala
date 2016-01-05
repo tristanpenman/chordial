@@ -108,7 +108,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
                                fixFingersCancellables: Map[Long, Cancellable]): Receive = {
     case CreateNode() =>
       if (nodes.size < idModulus) {
-        val nodeId = generateUniqueId(nodes.keySet)
+        val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
         val nodeRef = createNode(nodeId)
         val stabilisationCancellable = scheduleStabilisation(nodeRef)
         val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
@@ -119,14 +119,14 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
           fixFingersCancellables + (nodeId -> fixFingersCancellable)))
         sender() ! CreateNodeOk(nodeId, nodeRef)
       } else {
-        sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already running")
+        sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already created")
       }
 
     case CreateNodeWithSeed(seedId) =>
       nodes.get(seedId) match {
         case Some(seedRef) =>
           if (nodes.size < idModulus) {
-            val nodeId = generateUniqueId(nodes.keySet)
+            val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
             val nodeRef = createNode(nodeId)
             val joinRequest = nodeRef.ask(Join(seedId, seedRef))(joinRequestTimeout)
               .mapTo[JoinResponse]
@@ -153,7 +153,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
                 sender() ! CreateNodeWithSeedInternalError(ex.getMessage)
             }
           } else {
-            sender() ! CreateNodeWithSeedInvalidRequest(s"Maximum of $idModulus Chord nodes already running")
+            sender() ! CreateNodeWithSeedInvalidRequest(s"Maximum of $idModulus Chord nodes already created")
           }
 
         case None =>
