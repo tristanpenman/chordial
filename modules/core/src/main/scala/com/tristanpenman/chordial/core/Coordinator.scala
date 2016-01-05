@@ -16,8 +16,8 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
-class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, livenessCheckDuration: Duration,
-                  eventStream: EventStream)
+class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalRequestTimeout: Timeout,
+                  livenessCheckDuration: Duration, eventStream: EventStream)
   extends Actor with ActorLogging {
 
   import Coordinator._
@@ -37,12 +37,11 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
   private def newCheckPredecessorAlgorithm() =
     context.actorOf(CheckPredecessorAlgorithm.props())
 
-  private def newStabilisationAlgorithm() =
-    context.actorOf(StabilisationAlgorithm.props())
+  private def newStabilisationAlgorithm(innerNodeRef: ActorRef) =
+    context.actorOf(StabilisationAlgorithm.props(NodeInfo(nodeId, self), innerNodeRef, externalRequestTimeout))
 
-  private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef,
-                               requestTimeout: Timeout) = {
-    checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart(nodeRef, livenessCheckDuration))(requestTimeout)
+  private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef) = {
+    checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart(nodeRef, livenessCheckDuration))(algorithmTimeout)
       .mapTo[CheckPredecessorAlgorithmStartResponse]
       .map {
         case CheckPredecessorAlgorithmAlreadyRunning() =>
@@ -60,9 +59,9 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
       .pipeTo(replyTo)
   }
 
-  private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef, timeout: Timeout) = {
+  private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
     val algorithm = context.actorOf(ClosestPrecedingFingerAlgorithm.props())
-    algorithm.ask(ClosestPrecedingFingerAlgorithmStart(queryId, NodeInfo(nodeId, self), nodeRef))(timeout)
+    algorithm.ask(ClosestPrecedingFingerAlgorithmStart(queryId, NodeInfo(nodeId, self), nodeRef))(algorithmTimeout)
       .mapTo[ClosestPrecedingFingerAlgorithmStartResponse]
       .map {
         case ClosestPrecedingFingerAlgorithmOk(fingerId, fingerRef) =>
@@ -87,7 +86,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
    * This method passes in the ID and ActorRef of the current node as the initial candidate node, which means the
    * FindPredecessor algorithm will begin its search at the current node.
    */
-  private def findPredecessor(queryId: Long, sender: ActorRef, algorithmTimeout: Timeout): Unit = {
+  private def findPredecessor(queryId: Long, sender: ActorRef): Unit = {
     // The FindPredecessorAlgorithm actor will shutdown immediately after it sends a FindPredecessorAlgorithmOk or
     // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
@@ -117,7 +116,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
    * This method passes in the ActorRef of the current node as the search node, which means the operation will be
    * performed in the context of the current node.
    */
-  private def findSuccessor(queryId: Long, sender: ActorRef, algorithmTimeout: Timeout): Unit = {
+  private def findSuccessor(queryId: Long, sender: ActorRef): Unit = {
     // The FindSuccessorAlgorithm actor will shutdown immediately after it sends a FindSuccessorAlgorithmOk or
     // FindSuccessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
@@ -140,13 +139,13 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
       .pipeTo(sender)
   }
 
-  private def fixFingers(sender: ActorRef, algorithmTimeout: Timeout): Unit = {
+  private def fixFingers(sender: ActorRef): Unit = {
     sender ! FixFingersError("FixFingers request handler not implemented")
   }
 
-  private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef, timeout: Timeout) = {
+  private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef) = {
     val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
-    notifyAlgorithm.ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(timeout)
+    notifyAlgorithm.ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(algorithmTimeout)
       .mapTo[NotifyAlgorithmStartResponse]
       .map {
         case NotifyAlgorithmOk(predecessorUpdated: Boolean) =>
@@ -168,21 +167,23 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
       .pipeTo(replyTo)
   }
 
-  private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef,
-                        requestTimeout: Timeout) = {
-    stabilisationAlgorithm.ask(StabilisationAlgorithmStart(NodeInfo(nodeId, self), nodeRef))(requestTimeout)
+  private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef) = {
+    stabilisationAlgorithm.ask(StabilisationAlgorithmStart())(algorithmTimeout)
       .mapTo[StabilisationAlgorithmStartResponse]
       .map {
         case StabilisationAlgorithmAlreadyRunning() =>
           StabiliseInProgress()
-        case StabilisationAlgorithmOk() =>
+        case StabilisationAlgorithmFinished() =>
+          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
           StabiliseOk()
         case StabilisationAlgorithmError(message) =>
+          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
           StabiliseError(message)
       }
       .recover {
         case exception =>
           log.error(exception.getMessage)
+          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
           StabiliseError("Stabilise request failed due to internal error")
       }
       .pipeTo(replyTo)
@@ -192,46 +193,48 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, live
                         checkPredecessorAlgorithm: ActorRef,
                         stabilisationAlgorithm: ActorRef): Receive = {
     case CheckPredecessor() =>
-      checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender(), requestTimeout)
+      checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender())
 
     case m@ClosestPrecedingFinger(queryId: Long) =>
-      closestPrecedingFinger(nodeRef, queryId, sender(), requestTimeout)
+      closestPrecedingFinger(nodeRef, queryId, sender())
 
     case m@GetId() =>
-      nodeRef.ask(m)(requestTimeout).pipeTo(sender())
+      nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
     case m@GetPredecessor() =>
-      nodeRef.ask(m)(requestTimeout).pipeTo(sender())
+      nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
     case m@GetSuccessor() =>
-      nodeRef.ask(m)(requestTimeout).pipeTo(sender())
+      nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
     case FindPredecessor(queryId) =>
-      findPredecessor(queryId, sender(), requestTimeout)
+      findPredecessor(queryId, sender())
 
     case FindSuccessor(queryId) =>
-      findSuccessor(queryId, sender(), requestTimeout)
+      findSuccessor(queryId, sender())
 
     case FixFingers() =>
-      fixFingers(sender(), requestTimeout)
+      fixFingers(sender())
 
     case Join(seedId, seedRef) =>
       context.stop(nodeRef)
       context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
-      context.become(receiveWhileReady(newNode(nodeId, seedId, seedRef), newCheckPredecessorAlgorithm(),
-        newStabilisationAlgorithm()))
+      val newInnerNode = newNode(nodeId, seedId, seedRef)
+      context.become(receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(), newStabilisationAlgorithm(newInnerNode)))
       sender() ! JoinOk()
 
     case Notify(candidateId, candidateRef) =>
-      notify(nodeRef, NodeInfo(candidateId, candidateRef), sender(), requestTimeout)
+      notify(nodeRef, NodeInfo(candidateId, candidateRef), sender())
 
     case Stabilise() =>
-      stabilise(nodeRef, stabilisationAlgorithm, sender(), requestTimeout)
+      stabilise(nodeRef, stabilisationAlgorithm, sender())
   }
 
-  override def receive: Receive = receiveWhileReady(newNode(nodeId, nodeId, self), newCheckPredecessorAlgorithm(),
-    newStabilisationAlgorithm())
+  override def receive: Receive = {
+    val newInnerNode = newNode(nodeId, nodeId, self)
+    receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(), newStabilisationAlgorithm(newInnerNode))
+  }
 }
 
 object Coordinator {
@@ -314,7 +317,7 @@ object Coordinator {
 
   case class StabiliseError(message: String) extends StabiliseResponse
 
-  def props(nodeId: Long, keyspaceBits: Int, requestTimeout: Timeout, livenessCheckDuration: Duration,
-            eventStream: EventStream): Props =
-    Props(new Coordinator(nodeId, keyspaceBits, requestTimeout, livenessCheckDuration, eventStream))
+  def props(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, requestTimeout: Timeout,
+            livenessCheckDuration: Duration, eventStream: EventStream): Props =
+    Props(new Coordinator(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, livenessCheckDuration, eventStream))
 }

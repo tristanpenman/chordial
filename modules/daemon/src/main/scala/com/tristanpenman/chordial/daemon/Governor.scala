@@ -23,7 +23,14 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
   private val idModulus = 1 << keyspaceBits
 
-  private val requestTimeout = Timeout(4000.milliseconds)
+  // How long to wait when making requests that may be routed to other nodes
+  private val externalRequestTimeout = Timeout(500.milliseconds)
+
+  // How long Coordinator should wait until an algorithm is considered to have timed out. This should be significantly
+  // longer than the external request timeout, as some algorithms will make multiple external requests before
+  // running to completion
+  private val algorithmTimeout = Timeout(5000.milliseconds)
+
   private val checkPredecessorTimeout = Timeout(2500.milliseconds)
   private val fixFingersTimeout = Timeout(3000.milliseconds)
   private val livenessCheckDuration = 2000.milliseconds
@@ -87,8 +94,8 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
     }
 
   private def createNode(nodeId: Long): ActorRef = {
-    context.system.actorOf(Coordinator.props(nodeId, keyspaceBits, requestTimeout, livenessCheckDuration,
-      context.system.eventStream))
+    context.system.actorOf(Coordinator.props(nodeId, keyspaceBits, algorithmTimeout, externalRequestTimeout,
+      livenessCheckDuration, context.system.eventStream))
   }
 
   @tailrec
@@ -224,17 +231,17 @@ object Governor {
   sealed trait CreateNodeResponse extends Response
 
   case class CreateNodeOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeResponse
-  
+
   case class CreateNodeInternalError(message: String) extends CreateNodeResponse
 
   case class CreateNodeInvalidRequest(message: String) extends CreateNodeResponse
-  
+
   case class CreateNodeWithSeed(seedId: Long) extends Request
 
   sealed trait CreateNodeWithSeedResponse extends Response
 
   case class CreateNodeWithSeedOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeWithSeedResponse
-  
+
   case class CreateNodeWithSeedInternalError(message: String) extends CreateNodeWithSeedResponse
 
   case class CreateNodeWithSeedInvalidRequest(message: String) extends CreateNodeWithSeedResponse

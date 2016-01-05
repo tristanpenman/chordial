@@ -1,9 +1,15 @@
 package com.tristanpenman.chordial.core.actors
 
-import akka.actor.{ActorLogging, Actor, ActorRef, Props}
-import com.tristanpenman.chordial.core.Coordinator.{Notify, NotifyError, NotifyIgnored, NotifyOk}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.pattern.ask
+import akka.util.Timeout
+import com.tristanpenman.chordial.core.Coordinator._
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
+
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.language.postfixOps
 
 /**
  * Actor class that implements the Stabilise algorithm
@@ -17,92 +23,132 @@ import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
  *       successor = x;
  *     successor.notify(n);
  * }}}
+ *
+ * This actor essentially functions as a state machine for the execution state of the 'stabilisation' algorithm.
+ *
+ * The actor is either in the 'running' state or the 'ready' state. Sending a \c StabilisationAlgorithmReset message
+ * at any time will result in a transition to the 'ready' state, with a new set of arguments. However this will not
+ * stop existing invocations of the algorithm from running to completion. \c StabilisationAlgorithmReset messages are
+ * idempotent, and will always result in a \c StabilisationAlgorithmResetOk message being returned to the sender.
+ *
+ * The actor is initially in the 'ready' state, using the arguments provided at construction time.
+ *
+ * Sending a \c StabilisationAlgorithmStart message will start the algorithm, but only while in the 'ready' state.
+ * When the algorithm is in the running state, a \c StabilisationAlgorithmAlreadyRunning message will be returned to
+ * the sender. This allows for a certain degree of back-pressure in the client.
+ *
+ * When the algorithm completes, a \c StabilisationAlgorithmFinished or \c StabilisationAlgorithmError message will be
+ * sent to the original sender, depending on the outcome.
  */
-class StabilisationAlgorithm extends Actor with ActorLogging {
+class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout)
+  extends Actor with ActorLogging {
 
   import StabilisationAlgorithm._
 
-  def awaitNotify(delegate: ActorRef): Receive = {
-    case NotifyOk() =>
-      delegate ! StabilisationAlgorithmOk()
-      context.become(receive)
+  /**
+   * Execute the 'stabilisation' algorithm asynchronously
+   *
+   * @param node current node
+   * @param innerNodeRef current node's internal link data
+   *
+   * @return a \c Future that will complete once the updated successor has been notified of the current node
+   */
+  private def runAsync(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
 
-    case NotifyIgnored() =>
-      delegate ! StabilisationAlgorithmOk()
-      context.become(receive)
+    // Step 1:  Get the successor for the current node
+    innerNodeRef.ask(GetSuccessor())(requestTimeout)
+      .mapTo[GetSuccessorResponse]
+      .map {
+        case GetSuccessorOk(successorId, successorRef) => NodeInfo(successorId, successorRef)
+      }
 
-    case NotifyError(message) =>
-      delegate ! StabilisationAlgorithmError("Successor responded to Notify request with error: $message")
-      context.become(receive)
+    .flatMap { currentSuccessor =>
+      // Step 2a:  Get the successor's predecessor node
+      currentSuccessor.ref.ask(GetPredecessor())(requestTimeout)
+        .mapTo[GetPredecessorResponse]
+        .map {
+          case GetPredecessorOk(candidateId, candidateRef)
+            if Interval(node.id + 1, currentSuccessor.id).contains(candidateId) => NodeInfo(candidateId, candidateRef)
+          case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() => currentSuccessor
+        }
 
-    case StabilisationAlgorithmStart(_, _) =>
+      // Step 2b:  Choose the closest candidate successor and update the current node's successor if necessary
+      .flatMap { newSuccessor =>
+        if (newSuccessor.id == currentSuccessor.id) {
+          Future {
+            newSuccessor
+          }
+        } else {
+          innerNodeRef.ask(UpdateSuccessor(newSuccessor.id, newSuccessor.ref))(requestTimeout)
+            .mapTo[UpdateSuccessorResponse]
+            .map {
+              case UpdateSuccessorOk() => newSuccessor
+              case UpdateSuccessorInvalidRequest(message) => throw new Exception(message)
+            }
+        }
+      }
+    }
+
+    // Step 3:  Notify the new successor that this node may be its predecessor
+    .flatMap { newSuccessor =>
+      newSuccessor.ref.ask(Notify(node.id, node.ref))(requestTimeout)
+        .mapTo[NotifyResponse]
+        .map {
+          case NotifyOk() | NotifyIgnored() => util.Success(())
+          case NotifyError(message) => throw new Exception(message)
+        }
+    }
+  }
+
+  def running(): Receive = {
+    case StabilisationAlgorithmStart() =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
 
-    case message =>
-      log.warning("Received unexpected message while waiting for NotifyResponse: {}", message)
+    case StabilisationAlgorithmReset(newNode, newInnerNodeRef, newRequestTimeout) =>
+      context.become(ready(newNode, newInnerNodeRef, newRequestTimeout))
+      sender() ! StabilisationAlgorithmReady()
   }
 
-  def awaitUpdateSuccessor(delegate: ActorRef, node: NodeInfo, successorRef: ActorRef): Receive = {
-    case UpdateSuccessorOk() =>
-      successorRef ! Notify(node.id, node.ref)
-      context.become(awaitNotify(delegate))
+  def ready(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Receive = {
+    case StabilisationAlgorithmStart() =>
+      val replyTo = sender()
+      runAsync(node, innerNodeRef, requestTimeout).onComplete {
+        case util.Success(()) =>
+          replyTo ! StabilisationAlgorithmFinished()
+        case util.Failure(exception) =>
+          replyTo ! StabilisationAlgorithmError(exception.getMessage)
+      }
+      context.become(running())
 
-    case StabilisationAlgorithmStart(_, _) =>
-      sender() ! StabilisationAlgorithmAlreadyRunning()
-
-    case message =>
-      log.warning("Received unexpected message while waiting for UpdateSuccessorResponse: {}", message)
+    case StabilisationAlgorithmReset(newNode, newInnerNodeRef, newRequestTimeout) =>
+      context.become(ready(newNode, newInnerNodeRef, newRequestTimeout))
+      sender() ! StabilisationAlgorithmReady()
   }
 
-  def awaitGetPredecessor(delegate: ActorRef, node: NodeInfo, successor: NodeInfo, innerNodeRef: ActorRef): Receive = {
-    case GetPredecessorOk(candidateId, candidateRef) if Interval(node.id + 1, successor.id).contains(candidateId) =>
-      innerNodeRef ! UpdateSuccessor(candidateId, candidateRef)
-      context.become(awaitUpdateSuccessor(delegate, node, candidateRef))
-
-    case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() =>
-      successor.ref ! Notify(node.id, node.ref)
-      context.become(awaitNotify(delegate))
-
-    case StabilisationAlgorithmStart(_, _) =>
-      sender() ! StabilisationAlgorithmAlreadyRunning()
-
-    case message =>
-      log.warning("Received unexpected message while waiting for GetPredecessorResponse: {}", message)
-  }
-
-  def awaitGetSuccessor(delegate: ActorRef, node: NodeInfo, innerNodeRef: ActorRef): Receive = {
-    case GetSuccessorOk(successorId, successorRef) =>
-      successorRef ! GetPredecessor()
-      context.become(awaitGetPredecessor(delegate, node, NodeInfo(successorId, successorRef), innerNodeRef))
-
-    case StabilisationAlgorithmStart(_, _) =>
-      sender() ! StabilisationAlgorithmAlreadyRunning()
-
-    case message =>
-      log.warning("Received unexpected message while waiting for StabilisationAlgorithmStart: {}", message)
-  }
-
-  override def receive: Receive = {
-    case StabilisationAlgorithmStart(node, innerNodeRef) =>
-      innerNodeRef ! GetSuccessor()
-      context.become(awaitGetSuccessor(sender(), node, innerNodeRef))
-
-    case message =>
-      log.warning("Received unexpected message while waiting for StabilisationAlgorithmStart: {}", message)
-  }
+  override def receive: Receive = ready(initialNode, initialInnerNodeRef, initialRequestTimeout)
 }
 
 object StabilisationAlgorithm {
 
-  case class StabilisationAlgorithmStart(node: NodeInfo, innerNodeRef: ActorRef)
+  sealed trait StabilisationAlgorithmRequest
+
+  case class StabilisationAlgorithmStart() extends StabilisationAlgorithmRequest
+
+  case class StabilisationAlgorithmReset(newNode: NodeInfo, newInnerNodeRef: ActorRef, newRequestTimeout: Timeout)
+    extends StabilisationAlgorithmRequest
 
   sealed trait StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmAlreadyRunning() extends StabilisationAlgorithmStartResponse
+  case class StabilisationAlgorithmFinished() extends StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmOk() extends StabilisationAlgorithmStartResponse
+  case class StabilisationAlgorithmAlreadyRunning() extends StabilisationAlgorithmStartResponse
 
   case class StabilisationAlgorithmError(message: String) extends StabilisationAlgorithmStartResponse
 
-  def props(): Props = Props(new StabilisationAlgorithm())
+  sealed trait StabilisationAlgorithmResetResponse
+
+  case class StabilisationAlgorithmReady() extends StabilisationAlgorithmResetResponse
+
+  def props(initialNode: NodeInfo, initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout): Props =
+    Props(new StabilisationAlgorithm(initialNode, initialInnerNodeRef, initialRequestTimeout))
 }
