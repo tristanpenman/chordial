@@ -161,7 +161,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
       }
 
     case GetNodeIdSet() =>
-      sender() ! GetNodeIdSetOk(nodes.keySet)
+      sender() ! GetNodeIdSetOk(nodes.keySet ++ terminatedNodes)
 
     case GetNodeState(nodeId: Long) =>
       if (nodes.contains(nodeId)) {
