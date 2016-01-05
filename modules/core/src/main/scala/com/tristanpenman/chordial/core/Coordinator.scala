@@ -34,26 +34,29 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
     context.actorOf(Node.props(nodeId, keyspaceBits, NodeInfo(seedId, seedRef), eventStream))
 
-  private def newCheckPredecessorAlgorithm() =
-    context.actorOf(CheckPredecessorAlgorithm.props())
+  private def newCheckPredecessorAlgorithm(nodeRef: ActorRef) =
+    context.actorOf(CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
 
   private def newStabilisationAlgorithm(innerNodeRef: ActorRef) =
     context.actorOf(StabilisationAlgorithm.props(NodeInfo(nodeId, self), innerNodeRef, externalRequestTimeout))
 
   private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef) = {
-    checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart(nodeRef, livenessCheckDuration))(algorithmTimeout)
+    checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart())(algorithmTimeout)
       .mapTo[CheckPredecessorAlgorithmStartResponse]
       .map {
         case CheckPredecessorAlgorithmAlreadyRunning() =>
           CheckPredecessorInProgress()
-        case CheckPredecessorAlgorithmOk() =>
+        case CheckPredecessorAlgorithmFinished() =>
+          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
           CheckPredecessorOk()
         case CheckPredecessorAlgorithmError(message) =>
+          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
           CheckPredecessorError(message)
       }
       .recover {
         case exception =>
           log.error(exception.getMessage)
+          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
           CheckPredecessorError("CheckPredecessor request failed due to internal error")
       }
       .pipeTo(replyTo)
@@ -221,7 +224,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
       context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
       val newInnerNode = newNode(nodeId, seedId, seedRef)
-      context.become(receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(), newStabilisationAlgorithm(newInnerNode)))
+      context.become(receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(newInnerNode), newStabilisationAlgorithm(newInnerNode)))
       sender() ! JoinOk()
 
     case Notify(candidateId, candidateRef) =>
@@ -233,7 +236,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
 
   override def receive: Receive = {
     val newInnerNode = newNode(nodeId, nodeId, self)
-    receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(), newStabilisationAlgorithm(newInnerNode))
+    receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(newInnerNode), newStabilisationAlgorithm(newInnerNode))
   }
 }
 

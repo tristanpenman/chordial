@@ -1,9 +1,15 @@
 package com.tristanpenman.chordial.core.actors
 
 import akka.actor._
+import akka.pattern.ask
+import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.shared.NodeInfo
 
-import scala.concurrent.duration.Duration
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.language.postfixOps
+
 
 /**
  * Actor class that implements the CheckPredecessor algorithm
@@ -16,82 +22,126 @@ import scala.concurrent.duration.Duration
  *       predecessor = nil;
  * }}}
  *
- * Liveness is checked by sending a GetSuccessor message to the predecessor
+ * This actor functions as a state machine for the execution state of the 'check_predecessor' algorithm.
+ *
+ * The actor is either in the 'running' state or the 'ready' state. Sending a \c CheckPredecessorAlgorithmReset message
+ * at any time will result in a transition to the 'ready' state, with a new set of arguments. However this will not
+ * stop existing invocations of the algorithm from running to completion. \c CheckPredecessorAlgorithmReset messages are
+ * idempotent, and will always result in a \c CheckPredecessorAlgorithmResetOk message being returned to the sender.
+ *
+ * The actor is initially in the 'ready' state, using the arguments provided at construction time.
+ *
+ * Sending a \c CheckPredecessorAlgorithmStart message will start the algorithm, but only while in the 'ready' state.
+ * When the algorithm is in the running state, a \c CheckPredecessorAlgorithmAlreadyRunning message will be returned to
+ * the sender. This allows for a certain degree of back-pressure in the client.
+ *
+ * When the algorithm completes, a \c CheckPredecessorAlgorithmFinished or \c CheckPredecessorAlgorithmError message
+ * will be sent to the original sender, depending on the outcome.
  */
-class CheckPredecessorAlgorithm extends Actor with ActorLogging {
+class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout)
+  extends Actor with ActorLogging {
 
   import CheckPredecessorAlgorithm._
 
-  private def awaitResetPredecessor(replyTo: ActorRef): Receive = {
-    case ResetPredecessorOk() =>
-      replyTo ! CheckPredecessorAlgorithmOk()
-      context.become(receive)
+  /**
+   * Execute the 'check_predecessor' algorithm asynchronously
+   *
+   * @param innerNodeRef current node's internal link data
+   * @param requestTimeout time to wait on requests to external resources
+   *
+   * @return a \c Future that will complete once the predecessor has been contacted, or its pointer reset
+   */
+  private def runAsync(innerNodeRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
 
-    case CheckPredecessorAlgorithmStart(_, _) =>
+    // Step 1: Find predecessor for current node
+    innerNodeRef.ask(GetPredecessor())(requestTimeout)
+      .mapTo[GetPredecessorResponse]
+      .map {
+        case GetPredecessorOk(predecessorId, predecessorRef) =>
+          Some(NodeInfo(predecessorId, predecessorRef))
+        case GetPredecessorOkButUnknown() =>
+          None
+      }
+
+    // Step 2: Perform GetSuccessor request to decide whether predecessor pointer should be reset
+    .flatMap {
+      case Some(predecessor) =>
+        predecessor.ref.ask(GetSuccessor())(requestTimeout)
+          .mapTo[GetSuccessorResponse]
+          .map {
+            case GetSuccessorOk(_, _) => false   // Predecessor is active
+          }
+          .recover {
+            case exception => true               // Predecessor has failed
+          }
+      case None =>
+        Future { false }                         // Predecessor pointer has not been set
+    }
+
+    // Step 3: Reset predecessor pointer if necessary, and wait for acknowledgement
+    .flatMap { shouldResetPredecessor =>
+      if (shouldResetPredecessor) {
+        innerNodeRef.ask(ResetPredecessor())(requestTimeout)
+          .mapTo[ResetPredecessorResponse]
+          .map {
+            case ResetPredecessorOk() =>
+          }
+      } else {
+        Future { }
+      }
+    }
+  }
+
+  private def running(): Receive = {
+    case CheckPredecessorAlgorithmStart() =>
       sender() ! CheckPredecessorAlgorithmAlreadyRunning()
 
-    case message =>
-      log.warning("Received unexpected message while waiting for ResetPredecessorResponse: {}", message)
+    case CheckPredecessorAlgorithmReset(newInnerNodeRef, newRequestTimeout) =>
+      context.become(ready(newInnerNodeRef, newRequestTimeout))
+      sender() ! CheckPredecessorAlgorithmReady()
   }
 
-  private def awaitGetSuccessor(replyTo: ActorRef, innerNodeRef: ActorRef): Receive = {
-    case GetSuccessorOk(_, _) =>
-      replyTo ! CheckPredecessorAlgorithmOk()
-      context.setReceiveTimeout(Duration.Undefined)
-      context.become(receive)
+  private def ready(innerNodeRef: ActorRef, requestTimeout: Timeout): Receive = {
+    case CheckPredecessorAlgorithmStart() =>
+      var replyTo = sender()
+      runAsync(innerNodeRef, requestTimeout).onComplete {
+        case util.Success(()) =>
+          replyTo ! CheckPredecessorAlgorithmFinished()
+        case util.Failure(exception) =>
+          replyTo ! CheckPredecessorAlgorithmError(exception.getMessage)
+      }
+      context.become(running())
 
-    case ReceiveTimeout =>
-      innerNodeRef ! ResetPredecessor()
-      context.setReceiveTimeout(Duration.Undefined)
-      context.become(awaitResetPredecessor(replyTo))
-
-    case CheckPredecessorAlgorithmStart(_, _) =>
-      sender() ! CheckPredecessorAlgorithmAlreadyRunning()
-
-    case message =>
-      log.warning("Received unexpected message while waiting for GetSuccessorResponse: {}", message)
+    case CheckPredecessorAlgorithmReset(newInnerNodeRef, newRequestTimeout) =>
+      context.become(ready(newInnerNodeRef, newRequestTimeout))
+      sender() ! CheckPredecessorAlgorithmReady()
   }
 
-  private def awaitGetPredecessor(replyTo: ActorRef, innerNodeRef: ActorRef,
-                                  livenessCheckDuration: Duration): Receive = {
-    case GetPredecessorOk(_, predecessorRef) =>
-      predecessorRef ! GetSuccessor()
-      context.setReceiveTimeout(livenessCheckDuration)
-      context.become(awaitGetSuccessor(replyTo, innerNodeRef))
-
-    case GetPredecessorOkButUnknown() =>
-      replyTo ! CheckPredecessorAlgorithmOk()
-      context.become(receive)
-
-    case CheckPredecessorAlgorithmStart(_, _) =>
-      sender() ! CheckPredecessorAlgorithmAlreadyRunning()
-
-    case message =>
-      log.warning("Received unexpected message while waiting for GetPredecessorResponse: {}", message)
-  }
-
-  override def receive: Receive = {
-    case CheckPredecessorAlgorithmStart(innerNodeRef, livenessCheckDuration) =>
-      innerNodeRef ! GetPredecessor()
-      context.become(awaitGetPredecessor(sender(), innerNodeRef, livenessCheckDuration))
-
-    case message =>
-      log.warning("Received unexpected message while waiting for CheckPredecessorAlgorithmStart: {}", message)
-  }
+  override def receive: Receive = ready(initialInnerNodeRef, initialRequestTimeout)
 }
 
 object CheckPredecessorAlgorithm {
 
-  case class CheckPredecessorAlgorithmStart(innerNodeRef: ActorRef, livenessCheckDuration: Duration)
+  sealed trait CheckPredecessorAlgorithmRequest
+
+  case class CheckPredecessorAlgorithmStart()
+
+  case class CheckPredecessorAlgorithmReset(newInnerNodeRef: ActorRef, newRequestTimeout: Timeout)
+    extends CheckPredecessorAlgorithmRequest
 
   sealed trait CheckPredecessorAlgorithmStartResponse
 
-  case class CheckPredecessorAlgorithmAlreadyRunning() extends CheckPredecessorAlgorithmStartResponse
+  case class CheckPredecessorAlgorithmFinished() extends CheckPredecessorAlgorithmStartResponse
 
-  case class CheckPredecessorAlgorithmOk() extends CheckPredecessorAlgorithmStartResponse
+  case class CheckPredecessorAlgorithmAlreadyRunning() extends CheckPredecessorAlgorithmStartResponse
 
   case class CheckPredecessorAlgorithmError(message: String) extends CheckPredecessorAlgorithmStartResponse
 
-  def props(): Props = Props(new CheckPredecessorAlgorithm())
+  sealed trait CheckPredecessorAlgorithmResetResponse
+
+  case class CheckPredecessorAlgorithmReady() extends CheckPredecessorAlgorithmResetResponse
+
+  def props(initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout): Props =
+    Props(new CheckPredecessorAlgorithm(initialInnerNodeRef, initialRequestTimeout))
 
 }
