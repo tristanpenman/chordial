@@ -62,11 +62,13 @@ class Node(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStr
       } else {
         if (index == 0) {
           context.become(receiveWhileReady(finger, predecessor, fingerTable))
+          sender() ! UpdateFingerOk()
+          eventStream.publish(SuccessorUpdated(ownId, finger.id))
         } else {
           context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index - 1, Some(finger))))
+          sender() ! UpdateFingerOk()
+          eventStream.publish(FingerUpdated(ownId, index, finger.id))
         }
-        sender() ! UpdateFingerOk()
-        eventStream.publish(FingerUpdated(ownId, index, finger.id))
       }
 
     case UpdatePredecessor(predecessorId, predecessorRef) =>
