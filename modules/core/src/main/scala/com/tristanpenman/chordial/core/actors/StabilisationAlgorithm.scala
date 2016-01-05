@@ -50,6 +50,7 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
    *
    * @param node current node
    * @param innerNodeRef current node's internal link data
+   * @param requestTimeout time to wait on requests to external resources
    *
    * @return a \c Future that will complete once the updated successor has been notified of the current node
    */
@@ -94,13 +95,13 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
       newSuccessor.ref.ask(Notify(node.id, node.ref))(requestTimeout)
         .mapTo[NotifyResponse]
         .map {
-          case NotifyOk() | NotifyIgnored() => util.Success(())
+          case NotifyOk() | NotifyIgnored() =>
           case NotifyError(message) => throw new Exception(message)
         }
     }
   }
 
-  def running(): Receive = {
+  private def running(): Receive = {
     case StabilisationAlgorithmStart() =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
 
@@ -109,7 +110,7 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
       sender() ! StabilisationAlgorithmReady()
   }
 
-  def ready(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Receive = {
+  private def ready(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Receive = {
     case StabilisationAlgorithmStart() =>
       val replyTo = sender()
       runAsync(node, innerNodeRef, requestTimeout).onComplete {
