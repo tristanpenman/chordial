@@ -102,6 +102,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   }
 
   private def receiveWithNodes(nodes: Map[Long, ActorRef],
+                               terminatedNodes: Set[Long],
                                stabilisationCancellables: Map[Long, Cancellable],
                                checkPredecessorCancellables: Map[Long, Cancellable],
                                fixFingersCancellables: Map[Long, Cancellable]): Receive = {
@@ -112,7 +113,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
         val stabilisationCancellable = scheduleStabilisation(nodeRef)
         val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
         val fixFingersCancellable = scheduleFixFingers(nodeRef)
-        context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
+        context.become(receiveWithNodes(nodes + (nodeId -> nodeRef), terminatedNodes,
           stabilisationCancellables + (nodeId -> stabilisationCancellable),
           checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
           fixFingersCancellables + (nodeId -> fixFingersCancellable)))
@@ -142,7 +143,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
                 val stabilisationCancellable = scheduleStabilisation(nodeRef)
                 val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
                 val fixFingersCancellable = scheduleFixFingers(nodeRef)
-                context.become(receiveWithNodes(nodes + (nodeId -> nodeRef),
+                context.become(receiveWithNodes(nodes + (nodeId -> nodeRef), terminatedNodes,
                   stabilisationCancellables + (nodeId -> stabilisationCancellable),
                   checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
                   fixFingersCancellables + (nodeId -> fixFingersCancellable)))
@@ -162,6 +163,15 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
     case GetNodeIdSet() =>
       sender() ! GetNodeIdSetOk(nodes.keySet)
 
+    case GetNodeState(nodeId: Long) =>
+      if (nodes.contains(nodeId)) {
+        sender() ! GetNodeStateOk(true)
+      } else if (terminatedNodes.contains(nodeId)) {
+        sender() ! GetNodeStateOk(false)
+      } else {
+        sender() ! GetNodeStateError(s"Node with ID $nodeId does not exist")
+      }
+
     case GetNodeSuccessorId(nodeId: Long) =>
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
@@ -176,7 +186,11 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
             .pipeTo(sender())
 
         case None =>
-          sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId does not exist")
+          if (terminatedNodes.contains(nodeId)) {
+            sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId is no longer active")
+          } else {
+            sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId does not exist")
+          }
       }
 
     case TerminateNode(nodeId: Long) =>
@@ -186,7 +200,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
           stabilisationCancellables.get(nodeId).foreach(_.cancel())
           fixFingersCancellables.get(nodeId).foreach(_.cancel())
           context.stop(nodeRef)
-          context.become(receiveWithNodes(nodes - nodeId, stabilisationCancellables - nodeId,
+          context.become(receiveWithNodes(nodes - nodeId, terminatedNodes + nodeId, stabilisationCancellables - nodeId,
             checkPredecessorCancellables - nodeId, fixFingersCancellables - nodeId))
           sender() ! TerminateNodeResponseOk()
 
@@ -195,7 +209,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
       }
   }
 
-  override def receive: Receive = receiveWithNodes(Map.empty, Map.empty, Map.empty, Map.empty)
+  override def receive: Receive = receiveWithNodes(Map.empty, Set.empty, Map.empty, Map.empty, Map.empty)
 }
 
 object Governor {
@@ -229,6 +243,14 @@ object Governor {
   sealed trait GetNodeIdSetResponse extends Response
 
   case class GetNodeIdSetOk(nodeIds: Set[Long]) extends GetNodeIdSetResponse
+
+  case class GetNodeState(nodeId: Long) extends Request
+
+  sealed trait GetNodeStateResponse extends Response
+
+  case class GetNodeStateOk(active: Boolean) extends GetNodeStateResponse
+
+  case class GetNodeStateError(message: String) extends GetNodeStateResponse
 
   case class GetNodeSuccessorId(nodeId: Long) extends Request
 
