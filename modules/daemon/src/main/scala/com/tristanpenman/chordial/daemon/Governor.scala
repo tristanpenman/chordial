@@ -5,15 +5,15 @@ import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Coordinator
 import com.tristanpenman.chordial.core.Coordinator._
-import com.tristanpenman.chordial.core.Node.{GetSuccessorResponse, GetSuccessorOk, GetSuccessor}
+import com.tristanpenman.chordial.core.Event.NodeShuttingDown
+import com.tristanpenman.chordial.core.Node.{GetSuccessor, GetSuccessorOk, GetSuccessorResponse}
 
 import scala.annotation.tailrec
 import scala.concurrent.Await
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Failure, Success, Random}
-
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Random, Success}
 
 class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
@@ -203,6 +203,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
           context.become(receiveWithNodes(nodes - nodeId, terminatedNodes + nodeId, stabilisationCancellables - nodeId,
             checkPredecessorCancellables - nodeId, fixFingersCancellables - nodeId))
           sender() ! TerminateNodeResponseOk()
+          context.system.eventStream.publish(NodeShuttingDown(nodeId))
 
         case None =>
           sender() ! TerminateNodeResponseError(s"Node with ID $nodeId does not exist")

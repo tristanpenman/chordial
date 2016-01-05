@@ -33,6 +33,8 @@ class WebSocketWorker(val serverConnection: ActorRef, val governor: ActorRef)
           send(TextFrame(s"""{ "type": "FingerUpdated", "nodeId": $nodeId, "index": $index, "fingerId": $fingerId }"""))
         case NodeCreated(nodeId, successorId) =>
           send(TextFrame(s"""{ "type": "NodeCreated", "nodeId": $nodeId, "successorId": $successorId }"""))
+        case NodeShuttingDown(nodeId) =>
+          send(TextFrame(s"""{ "type": "NodeDeleted", "nodeId": $nodeId }"""))
         case PredecessorReset(nodeId) =>
           send(TextFrame(s"""{ "type": "PredecessorReset", "nodeId": $nodeId }"""))
         case PredecessorUpdated(nodeId, predecessorId) =>

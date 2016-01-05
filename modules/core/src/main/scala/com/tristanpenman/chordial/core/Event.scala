@@ -10,6 +10,8 @@ object Event {
 
   case class NodeCreated(nodeId: Long, successorId: Long) extends Event
 
+  case class NodeShuttingDown(nodeId: Long) extends Event
+
   case class PredecessorReset(nodeId: Long) extends Event
 
   case class PredecessorUpdated(nodeId: Long, predecessorId: Long) extends Event

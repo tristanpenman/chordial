@@ -13,15 +13,25 @@
             padding: 20px;
         }
 
-        path.arc {
+        path.arc.ring {
             fill: #fff;
-            stroke: #999;
+            stroke: #aaa;
+        }
+
+        path.arc.node {
+            fill: #fff;
+            stroke: #333;
+        }
+
+        path.arc.node.inactive {
+            fill: #f00;
         }
 
         path.chord {
             fill: none;
             stroke: #336699;
         }
+
     </style>
     <script src="lib/d3/d3.js" charset="utf-8"></script>
 </head>
@@ -30,8 +40,8 @@
 </body>
 <script language="javascript" type="text/javascript">
 
-    d3.selection.prototype.moveToFront = function() {
-        return this.each(function(){
+    d3.selection.prototype.moveToFront = function () {
+        return this.each(function () {
             this.parentNode.appendChild(this);
         });
     };
@@ -67,7 +77,7 @@
         var arc = d3.svg.arc();
 
         svg.append("svg:path")
-                .attr("class", "arc")
+                .attr("class", "arc ring")
                 .attr("d", arc.outerRadius(radius).innerRadius(0).startAngle(0).endAngle(2 * Math.PI));
 
         var line = d3.svg.line.radial()
@@ -94,25 +104,27 @@
                     var y = radius * Math.sin((node.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
 
                     svg.append("svg:path")
-                            .attr("class", "arc node node-" + node.nodeId)
+                            .attr("class", "arc node node-" + node.nodeId + (node.active ? "" : " inactive"))
                             .attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
                             .attr("transform", "translate(" + x + "," + y + ")");
 
-                    var root = {parent: null, radius: 0};
-                    var source = {value: node.nodeId, radius: radius, parent: root};
-                    var target = {value: node.successorId, radius: radius, parent: root};
-                    root.children = [source, target];
-                    hierarchy(root);
-                    var splines = bundle([
-                        {
-                            source: source,
-                            target: target
-                        }
-                    ]);
+                    if (node.active) {
+                        var root = {parent: null, radius: 0};
+                        var source = {value: node.nodeId, radius: radius, parent: root};
+                        var target = {value: node.successorId, radius: radius, parent: root};
+                        root.children = [source, target];
+                        hierarchy(root);
+                        var splines = bundle([
+                            {
+                                source: source,
+                                target: target
+                            }
+                        ]);
 
-                    svg.append("svg:path")
-                            .attr("class", "chord node-" + node.nodeId + "-successor")
-                            .attr("d", line(splines[0]));
+                        svg.append("svg:path")
+                                .attr("class", "chord node-" + node.nodeId + "-successor")
+                                .attr("d", line(splines[0]));
+                    }
 
                     svg.selectAll(".node").moveToFront();
                 }
@@ -128,47 +140,65 @@
                 console.log(event.data);
             };
 
+            function createNodeOrUpdateSuccessor(svg, json) {
+                var x = radius * Math.cos((json.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
+                var y = radius * Math.sin((json.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
+
+                var selection = svg.selectAll(".node-" + json.nodeId);
+                if (selection.size() > 0) {
+                    selection.attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
+                            .attr("transform", "translate(" + x + "," + y + ")");
+                } else {
+                    svg.append("svg:path")
+                            .attr("class", "arc node node-" + json.nodeId)
+                            .attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
+                            .attr("transform", "translate(" + x + "," + y + ")");
+                }
+
+                var root = {parent: null, radius: 0};
+                var source = {value: json.nodeId, radius: radius, parent: root};
+                var target = {value: json.successorId, radius: radius, parent: root};
+                root.children = [source, target];
+                hierarchy(root);
+                var splines = bundle([
+                    {
+                        source: source,
+                        target: target
+                    }
+                ]);
+
+                // TODO: This can likely be improved using a data() join
+                selection = svg.selectAll(".node-" + json.nodeId + "-successor");
+                if (selection.size() > 0) {
+                    selection.attr("d", line(splines[0]));
+                } else {
+                    svg.append("svg:path")
+                            .attr("class", "chord node-" + json.nodeId + "-successor")
+                            .attr("d", line(splines[0]));
+                }
+
+                svg.selectAll(".node").moveToFront();
+            }
+
+            function markNodeAsInactive(svg, json) {
+                svg.selectAll(".node-" + json.nodeId).classed("inactive", true);
+                svg.selectAll(".node-" + json.nodeId + "-successor").remove();
+            }
+
             websocket.onmessage = function (event) {
                 var json = JSON.parse(event.data);
-                if (json.hasOwnProperty('type') && (json.type === 'SuccessorUpdated' || json.type === 'NodeCreated')) {
+                if (!json.hasOwnProperty('type')) {
+                    return;
+                }
 
-                    var x = radius * Math.cos((json.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
-                    var y = radius * Math.sin((json.nodeId * keyspaceFactor - 90) / 180 * Math.PI);
-
-                    var selection = svg.selectAll(".node-" + json.nodeId);
-                    if (selection.size() > 0) {
-                        selection.attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
-                                .attr("transform", "translate(" + x + "," + y + ")");
-                    } else {
-                        svg.append("svg:path")
-                                .attr("class", "arc node node-" + json.nodeId)
-                                .attr("d", arc.outerRadius(5).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
-                                .attr("transform", "translate(" + x + "," + y + ")");
-                    }
-
-                    var root = {parent: null, radius: 0};
-                    var source = {value: json.nodeId, radius: radius, parent: root};
-                    var target = {value: json.successorId, radius: radius, parent: root};
-                    root.children = [source, target];
-                    hierarchy(root);
-                    var splines = bundle([
-                        {
-                            source: source,
-                            target: target
-                        }
-                    ]);
-
-                    // TODO: This can likely be improved using a data() join
-                    selection = svg.selectAll(".node-" + json.nodeId + "-successor");
-                    if (selection.size() > 0) {
-                        selection.attr("d", line(splines[0]));
-                    } else {
-                        svg.append("svg:path")
-                                .attr("class", "chord node-" + json.nodeId + "-successor")
-                                .attr("d", line(splines[0]));
-                    }
-
-                    svg.selectAll(".node").moveToFront();
+                switch (json.type) {
+                    case "SuccessorUpdated":
+                    case "NodeCreated":
+                        createNodeOrUpdateSuccessor(svg, json);
+                        break;
+                    case 'NodeDeleted':
+                        markNodeAsInactive(svg, json);
+                        break;
                 }
             }
         });

@@ -7,37 +7,52 @@ import com.tristanpenman.chordial.daemon.Governor._
 import spray.http.MediaTypes._
 import spray.http.StatusCodes
 import spray.httpx.marshalling.ToResponseMarshallable
-import spray.json.DefaultJsonProtocol._
 import spray.json._
 import spray.routing._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
+case class NodeAttributes(nodeId: Long, successorId: Option[Long], active: Boolean)
+
+object JsonProtocol extends DefaultJsonProtocol {
+  implicit val nodeAttributeFormat = jsonFormat3(NodeAttributes)
+}
+
 trait WebService extends HttpService {
+
+  import JsonProtocol._
+
   implicit def ec: ExecutionContextExecutor = actorRefFactory.dispatcher
 
   implicit val timeout: Timeout = 3.seconds
 
   protected def governor: ActorRef
 
-  private type NodeAttributes = Map[String, Long]
-
-  private type Nodes = Iterable[NodeAttributes]
-
-  private def nodeAttributeMap(nodeId: Long, successorId: Long): NodeAttributes =
-    Map("nodeId" -> nodeId, "successorId" -> successorId)
-
-  private def getNodeAttributes(nodeId: Long): Future[NodeAttributes] = governor.ask(GetNodeSuccessorId(nodeId))
-    .mapTo[GetNodeSuccessorIdResponse]
+  private def getNodeAttributes(nodeId: Long): Future[NodeAttributes] = governor.ask(GetNodeState(nodeId))
+    .mapTo[GetNodeStateResponse]
     .map {
-      case GetNodeSuccessorIdOk(successorId) =>
-        nodeAttributeMap(nodeId, successorId)
-      case GetNodeSuccessorIdError(message) =>
+      case GetNodeStateOk(active) =>
+        active
+      case GetNodeStateError(message) =>
         throw new Exception(message)
     }
+    .flatMap { case active =>
+      if (active) {
+        governor.ask(GetNodeSuccessorId(nodeId))
+          .mapTo[GetNodeSuccessorIdResponse]
+          .map {
+            case GetNodeSuccessorIdOk(successorId) =>
+              NodeAttributes(nodeId, Some(successorId), active = true)
+            case GetNodeSuccessorIdError(message) =>
+              throw new Exception(message)
+          }
+      } else {
+        Future { NodeAttributes(nodeId, None, active = false) }
+      }
+    }
 
-  private def getNodes: Future[Nodes] = governor.ask(GetNodeIdSet())
+  private def getNodes: Future[Iterable[NodeAttributes]] = governor.ask(GetNodeIdSet())
     .mapTo[GetNodeIdSetResponse]
     .flatMap {
       case GetNodeIdSetOk(nodeIdSet) =>
@@ -75,7 +90,7 @@ trait WebService extends HttpService {
                       .mapTo[CreateNodeWithSeedResponse]
                       .map {
                         case CreateNodeWithSeedOk(nodeId, nodeRef) =>
-                          nodeAttributeMap(nodeId, seedId.toLong).toJson.compactPrint
+                          NodeAttributes(nodeId, Some(seedId.toLong), active = true).toJson.compactPrint
                         case CreateNodeWithSeedInternalError(message) =>
                           throw new Exception(message)
                         case CreateNodeWithSeedInvalidRequest(message) =>
@@ -87,7 +102,7 @@ trait WebService extends HttpService {
                       .mapTo[CreateNodeResponse]
                       .map {
                         case CreateNodeOk(nodeId, nodeRef) =>
-                          nodeAttributeMap(nodeId, nodeId).toJson.compactPrint
+                          NodeAttributes(nodeId, Some(nodeId), active = true).toJson.compactPrint
                         case CreateNodeInternalError(message) =>
                           throw new Exception(message)
                         case CreateNodeInvalidRequest(message) =>
