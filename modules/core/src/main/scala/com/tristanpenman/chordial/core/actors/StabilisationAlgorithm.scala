@@ -14,7 +14,9 @@ import scala.language.postfixOps
 /**
  * Actor class that implements the Stabilise algorithm
  *
- * The Stabilise algorithm is defined in the Chord paper as follows:
+ * == Algorithm ==
+ *
+ * The basic stabilisation algorithm is defined in the Chord paper as follows:
  *
  * {{{
  *   n.stabilise()
@@ -23,6 +25,13 @@ import scala.language.postfixOps
  *       successor = x;
  *     successor.notify(n);
  * }}}
+ *
+ * This implementation includes enhancements described in section E.3 (Failure and Replication) of the Chord paper,
+ * that relate to maintaining a list of successor pointers that can be used if one or more of the closest successors
+ * fails to respond within a reasonable amount of time. After the closest successor has been determined, its successor
+ * list is reconciled with that of the current node.
+ *
+ * == Messaging semantics ==
  *
  * This actor essentially functions as a state machine for the execution state of the 'stabilisation' algorithm.
  *
@@ -63,8 +72,8 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
         case GetSuccessorListOk(primarySuccessor, _) => primarySuccessor
       }
 
+    // Step 2:  Get the successor's predecessor node
     .flatMap { currentSuccessor =>
-      // Step 2a:  Get the successor's predecessor node
       currentSuccessor.ref.ask(GetPredecessor())(requestTimeout)
         .mapTo[GetPredecessorResponse]
         .map {
@@ -72,24 +81,26 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
             if Interval(node.id + 1, currentSuccessor.id).contains(candidate.id) => candidate
           case GetPredecessorOk(_) | GetPredecessorOkButUnknown() => currentSuccessor
         }
-
-      // Step 2b:  Choose the closest candidate successor and update the current node's successor list if necessary
-      .flatMap { newSuccessor =>
-        if (newSuccessor.id == currentSuccessor.id) {
-          Future {
-            newSuccessor
-          }
-        } else {
-          innerNodeRef.ask(UpdateSuccessorList(newSuccessor, List.empty))(requestTimeout)
-            .mapTo[UpdateSuccessorListResponse]
-            .map {
-              case UpdateSuccessorListOk() => newSuccessor
-            }
-        }
-      }
     }
 
-    // Step 3:  Notify the new successor that this node may be its predecessor
+    // Step 3:  Reconcile successor list of closest node with that of the current node
+    .flatMap { closestSuccessor =>
+      closestSuccessor.ref.ask(GetSuccessorList())(requestTimeout)
+        .mapTo[GetSuccessorListResponse]
+        .map {
+          case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
+            primarySuccessor :: backupSuccessors.dropRight(1)
+        }
+        .flatMap { backupSuccessors =>
+          innerNodeRef.ask(UpdateSuccessorList(closestSuccessor, backupSuccessors))(requestTimeout)
+            .mapTo[UpdateSuccessorListResponse]
+            .map {
+              case UpdateSuccessorListOk() => closestSuccessor
+            }
+        }
+    }
+
+    // Step 4:  Notify the new successor that this node presumes to be its predecessor
     .flatMap { newSuccessor =>
       newSuccessor.ref.ask(Notify(node.id, node.ref))(requestTimeout)
         .mapTo[NotifyResponse]

@@ -61,9 +61,13 @@ class Node(ownId: Long, fingerTableSize: Int, seed: NodeInfo, eventStream: Event
       eventStream.publish(PredecessorUpdated(ownId, newPredecessor.id))
 
     case UpdateSuccessorList(newPrimarySuccessor, newBackupSuccessors) =>
-      context.become(receiveWhileReady(newPrimarySuccessor, newBackupSuccessors, predecessor, fingerTable))
-      sender() ! UpdateSuccessorListOk()
-      eventStream.publish(SuccessorListUpdated(ownId, newPrimarySuccessor.id, newBackupSuccessors.map { _.id }))
+      if (newPrimarySuccessor != primarySuccessor || newBackupSuccessors != backupSuccessors) {
+        context.become(receiveWhileReady(newPrimarySuccessor, newBackupSuccessors, predecessor, fingerTable))
+        sender() ! UpdateSuccessorListOk()
+        eventStream.publish(SuccessorListUpdated(ownId, newPrimarySuccessor.id, newBackupSuccessors.map(_.id)))
+      } else {
+        sender() ! UpdateSuccessorListOk()
+      }
   }
 
   eventStream.publish(NodeCreated(ownId, seed.id))
