@@ -5,7 +5,7 @@ import akka.event.EventStream
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.actors.CheckPredecessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.ClosestPrecedingFingerAlgorithm._
+import com.tristanpenman.chordial.core.actors.ClosestPrecedingNodeAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
 import com.tristanpenman.chordial.core.actors.NotifyAlgorithm._
@@ -27,12 +27,15 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
 
   private val idModulus = 1 << keyspaceBits
 
+  // Finger table ranges from (nodeId + 2^1) up to (nodeId + 2^(keyspace - 1))
+  private def fingerTableSize = keyspaceBits - 1
+
   // Check that node ID is reasonable
   require(nodeId >= 0, "ownId must be a non-negative Long value")
   require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
 
   private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
-    context.actorOf(Node.props(nodeId, keyspaceBits, NodeInfo(seedId, seedRef), eventStream))
+    context.actorOf(Node.props(nodeId, fingerTableSize, NodeInfo(seedId, seedRef), eventStream))
 
   private def newCheckPredecessorAlgorithm(nodeRef: ActorRef) =
     context.actorOf(CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
@@ -63,21 +66,21 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
   }
 
   private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
-    val algorithm = context.actorOf(ClosestPrecedingFingerAlgorithm.props())
-    algorithm.ask(ClosestPrecedingFingerAlgorithmStart(queryId, NodeInfo(nodeId, self), nodeRef))(algorithmTimeout)
-      .mapTo[ClosestPrecedingFingerAlgorithmStartResponse]
+    val algorithm = context.actorOf(ClosestPrecedingNodeAlgorithm.props())
+    algorithm.ask(ClosestPrecedingNodeAlgorithmStart(queryId, NodeInfo(nodeId, self), nodeRef))(algorithmTimeout)
+      .mapTo[ClosestPrecedingNodeAlgorithmStartResponse]
       .map {
-        case ClosestPrecedingFingerAlgorithmOk(fingerId, fingerRef) =>
-          ClosestPrecedingFingerOk(fingerId, fingerRef)
-        case ClosestPrecedingFingerAlgorithmAlreadyRunning() =>
+        case ClosestPrecedingNodeAlgorithmOk(finger) =>
+          ClosestPrecedingNodeOk(finger)
+        case ClosestPrecedingNodeAlgorithmAlreadyRunning() =>
           throw new Exception("ClosestPrecedingFingerAlgorithm actor already running")
-        case ClosestPrecedingFingerAlgorithmError(message) =>
-          ClosestPrecedingFingerError(message)
+        case ClosestPrecedingNodeAlgorithmError(message) =>
+          ClosestPrecedingNodeError(message)
       }
       .recover {
         case exception =>
           context.stop(algorithm)
-          ClosestPrecedingFingerError(exception.getMessage)
+          ClosestPrecedingNodeError(exception.getMessage)
       }
       .pipeTo(replyTo)
   }
@@ -94,11 +97,11 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
     // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
     val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props())
-    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmStart(queryId, nodeId, self))(algorithmTimeout)
+    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmStart(queryId, NodeInfo(nodeId, self)))(algorithmTimeout)
       .mapTo[FindPredecessorAlgorithmStartResponse]
       .map {
-        case FindPredecessorAlgorithmOk(predecessorId, predecessorRef) =>
-          FindPredecessorOk(queryId, predecessorId, predecessorRef)
+        case FindPredecessorAlgorithmOk(predecessor) =>
+          FindPredecessorOk(queryId, predecessor)
         case FindPredecessorAlgorithmAlreadyRunning() =>
           throw new Exception("FindPredecessorAlgorithm actor already running")
         case FindPredecessorAlgorithmError(message) =>
@@ -127,8 +130,8 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
     findSuccessorAlgorithm.ask(FindSuccessorAlgorithmStart(queryId, self))(algorithmTimeout)
       .mapTo[FindSuccessorAlgorithmStartResponse]
       .map {
-        case FindSuccessorAlgorithmOk(successorId, successorRef) =>
-          FindSuccessorOk(queryId, successorId, successorRef)
+        case FindSuccessorAlgorithmOk(successor) =>
+          FindSuccessorOk(queryId, successor)
         case FindSuccessorAlgorithmAlreadyRunning() =>
           throw new Exception("FindSuccessorAlgorithm actor already running")
         case FindSuccessorAlgorithmError(message) =>
@@ -198,7 +201,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
     case CheckPredecessor() =>
       checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender())
 
-    case m@ClosestPrecedingFinger(queryId: Long) =>
+    case m@ClosestPrecedingNode(queryId: Long) =>
       closestPrecedingFinger(nodeRef, queryId, sender())
 
     case m@GetId() =>
@@ -207,7 +210,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
     case m@GetPredecessor() =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
-    case m@GetSuccessor() =>
+    case m@GetSuccessorList() =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
     case FindPredecessor(queryId) =>
@@ -256,20 +259,19 @@ object Coordinator {
 
   case class CheckPredecessorError(message: String) extends CheckPredecessorResponse
 
-  case class ClosestPrecedingFinger(queryId: Long) extends Request
+  case class ClosestPrecedingNode(queryId: Long) extends Request
 
-  sealed trait ClosestPrecedingFingerResponse extends Response
+  sealed trait ClosestPrecedingNodeResponse extends Response
 
-  case class ClosestPrecedingFingerOk(nodeId: Long, nodeRef: ActorRef) extends ClosestPrecedingFingerResponse
+  case class ClosestPrecedingNodeOk(node: NodeInfo) extends ClosestPrecedingNodeResponse
 
-  case class ClosestPrecedingFingerError(message: String) extends ClosestPrecedingFingerResponse
+  case class ClosestPrecedingNodeError(message: String) extends ClosestPrecedingNodeResponse
 
   case class FindPredecessor(queryId: Long) extends Request
 
   sealed trait FindPredecessorResponse extends Response
 
-  case class FindPredecessorOk(queryId: Long, predecessorId: Long, predecessorRef: ActorRef)
-    extends FindPredecessorResponse
+  case class FindPredecessorOk(queryId: Long, predecessor: NodeInfo) extends FindPredecessorResponse
 
   case class FindPredecessorError(queryId: Long, message: String) extends FindPredecessorResponse
 
@@ -277,8 +279,7 @@ object Coordinator {
 
   sealed trait FindSuccessorResponse extends Response
 
-  case class FindSuccessorOk(queryId: Long, successorId: Long, successorRef: ActorRef)
-    extends FindSuccessorResponse
+  case class FindSuccessorOk(queryId: Long, successor: NodeInfo) extends FindSuccessorResponse
 
   case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
 

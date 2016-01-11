@@ -39,8 +39,8 @@ class WebSocketWorker(val serverConnection: ActorRef, val governor: ActorRef)
           send(TextFrame(s"""{ "type": "PredecessorReset", "nodeId": $nodeId }"""))
         case PredecessorUpdated(nodeId, predecessorId) =>
           send(TextFrame(s"""{ "type": "PredecessorUpdated", "nodeId": $nodeId, "predecessorId": $predecessorId }"""))
-        case SuccessorUpdated(nodeId, successorId) =>
-          send(TextFrame(s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $successorId }"""))
+        case SuccessorListUpdated(nodeId, primarySuccessorId, _) =>
+          send(TextFrame(s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $primarySuccessorId }"""))
       }
 
     case x: FrameCommandFailed =>

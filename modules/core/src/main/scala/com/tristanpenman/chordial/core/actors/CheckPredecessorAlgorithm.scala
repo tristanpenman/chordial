@@ -4,7 +4,6 @@ import akka.actor._
 import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node._
-import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -57,8 +56,8 @@ class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTim
     innerNodeRef.ask(GetPredecessor())(requestTimeout)
       .mapTo[GetPredecessorResponse]
       .map {
-        case GetPredecessorOk(predecessorId, predecessorRef) =>
-          Some(NodeInfo(predecessorId, predecessorRef))
+        case GetPredecessorOk(predecessor) =>
+          Some(predecessor)
         case GetPredecessorOkButUnknown() =>
           None
       }
@@ -66,10 +65,10 @@ class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTim
     // Step 2: Perform GetSuccessor request to decide whether predecessor pointer should be reset
     .flatMap {
       case Some(predecessor) =>
-        predecessor.ref.ask(GetSuccessor())(requestTimeout)
-          .mapTo[GetSuccessorResponse]
+        predecessor.ref.ask(GetSuccessorList())(requestTimeout)
+          .mapTo[GetSuccessorListResponse]
           .map {
-            case GetSuccessorOk(_, _) => false   // Predecessor is active
+            case GetSuccessorListOk(_, _) => false  // Predecessor is active
           }
           .recover {
             case exception => true               // Predecessor has failed

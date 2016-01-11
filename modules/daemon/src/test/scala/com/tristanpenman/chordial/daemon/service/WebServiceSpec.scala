@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.daemon.service
 import akka.actor.{ActorSystem, Actor, ActorRef}
 import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.shared.NodeInfo
 import com.tristanpenman.chordial.daemon.WebService
 import org.scalatest.{FlatSpec, ShouldMatchers}
 import spray.testkit.ScalatestRouteTest
@@ -15,9 +16,9 @@ class WebServiceSpec extends FlatSpec with ShouldMatchers with WebService with S
       case GetId() =>
         sender() ! GetIdOk(0L)
       case GetPredecessor() =>
-        sender() ! GetPredecessorOk(-1L, self)
-      case GetSuccessor() =>
-        sender() ! GetSuccessorOk(1L, self)
+        sender() ! GetPredecessorOk(NodeInfo(-1L, self))
+      case GetSuccessorList() =>
+        sender() ! GetSuccessorListOk(NodeInfo(1L, self), List.empty)
     }
   })
 

@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.core.actors
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.tristanpenman.chordial.core.Coordinator.{FindPredecessor, FindPredecessorError, FindPredecessorOk}
 import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.shared.NodeInfo
 
 /**
  * Actor class that implements the FindSuccessor algorithm
@@ -22,9 +23,9 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
 
   import FindSuccessorAlgorithm._
 
-  def awaitGetSuccessor(delegate: ActorRef): Receive = {
-    case GetSuccessorOk(successorId, successorRef: ActorRef) =>
-      delegate ! FindSuccessorAlgorithmOk(successorId, successorRef)
+  def awaitGetSuccessorList(delegate: ActorRef): Receive = {
+    case GetSuccessorListOk(primarySuccessor, _) =>
+      delegate ! FindSuccessorAlgorithmOk(primarySuccessor)
       context.stop(self)
 
     case FindSuccessorAlgorithmStart(_, _) =>
@@ -35,9 +36,9 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
   }
 
   def awaitFindPredecessor(delegate: ActorRef): Receive = {
-    case FindPredecessorOk(queryId, predecessorId, predecessorRef) =>
-      predecessorRef ! GetSuccessor()
-      context.become(awaitGetSuccessor(delegate))
+    case FindPredecessorOk(queryId, predecessor) =>
+      predecessor.ref ! GetSuccessorList()
+      context.become(awaitGetSuccessorList(delegate))
 
     case FindPredecessorError(queryId, message) =>
       delegate ! FindSuccessorAlgorithmError(message)
@@ -68,8 +69,7 @@ object FindSuccessorAlgorithm {
 
   case class FindSuccessorAlgorithmAlreadyRunning() extends FindSuccessorAlgorithmStartResponse
 
-  case class FindSuccessorAlgorithmOk(successorId: Long, successorRef: ActorRef)
-    extends FindSuccessorAlgorithmStartResponse
+  case class FindSuccessorAlgorithmOk(successor: NodeInfo) extends FindSuccessorAlgorithmStartResponse
 
   case class FindSuccessorAlgorithmError(message: String) extends FindSuccessorAlgorithmStartResponse
 

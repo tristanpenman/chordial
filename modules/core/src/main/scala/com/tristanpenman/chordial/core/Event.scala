@@ -16,6 +16,6 @@ object Event {
 
   case class PredecessorUpdated(nodeId: Long, predecessorId: Long) extends Event
 
-  case class SuccessorUpdated(nodeId: Long, successorId: Long) extends Event
+  case class SuccessorListUpdated(nodeId: Long, primarySuccessorId: Long, backupSuccessorIds: List[Long]) extends Event
 
 }

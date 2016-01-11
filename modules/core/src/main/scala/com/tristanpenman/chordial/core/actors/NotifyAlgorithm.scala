@@ -32,9 +32,9 @@ class NotifyAlgorithm extends Actor with ActorLogging {
   }
 
   def awaitGetPredecessor(delegate: ActorRef, node: NodeInfo, candidate: NodeInfo, innerNodeRef: ActorRef): Receive = {
-    case GetPredecessorOk(predecessorId, predecessorRef) =>
-      if (Interval(predecessorId + 1, node.id).contains(candidate.id)) {
-        innerNodeRef ! UpdatePredecessor(candidate.id, candidate.ref)
+    case GetPredecessorOk(predecessor) =>
+      if (Interval(predecessor.id + 1, node.id).contains(candidate.id)) {
+        innerNodeRef ! UpdatePredecessor(candidate)
         context.become(awaitUpdatePredecessor(delegate))
       } else {
         delegate ! NotifyAlgorithmOk(false)
@@ -42,7 +42,7 @@ class NotifyAlgorithm extends Actor with ActorLogging {
       }
 
     case GetPredecessorOkButUnknown() =>
-      innerNodeRef ! UpdatePredecessor(candidate.id, candidate.ref)
+      innerNodeRef ! UpdatePredecessor(candidate)
       context.become(awaitUpdatePredecessor(delegate))
 
     case NotifyAlgorithmStart(_, _, _) =>

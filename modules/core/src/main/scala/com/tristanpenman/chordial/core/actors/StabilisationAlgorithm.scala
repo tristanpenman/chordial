@@ -57,10 +57,10 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
   private def runAsync(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
 
     // Step 1:  Get the successor for the current node
-    innerNodeRef.ask(GetSuccessor())(requestTimeout)
-      .mapTo[GetSuccessorResponse]
+    innerNodeRef.ask(GetSuccessorList())(requestTimeout)
+      .mapTo[GetSuccessorListResponse]
       .map {
-        case GetSuccessorOk(successorId, successorRef) => NodeInfo(successorId, successorRef)
+        case GetSuccessorListOk(primarySuccessor, _) => primarySuccessor
       }
 
     .flatMap { currentSuccessor =>
@@ -68,23 +68,22 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
       currentSuccessor.ref.ask(GetPredecessor())(requestTimeout)
         .mapTo[GetPredecessorResponse]
         .map {
-          case GetPredecessorOk(candidateId, candidateRef)
-            if Interval(node.id + 1, currentSuccessor.id).contains(candidateId) => NodeInfo(candidateId, candidateRef)
-          case GetPredecessorOk(_, _) | GetPredecessorOkButUnknown() => currentSuccessor
+          case GetPredecessorOk(candidate)
+            if Interval(node.id + 1, currentSuccessor.id).contains(candidate.id) => candidate
+          case GetPredecessorOk(_) | GetPredecessorOkButUnknown() => currentSuccessor
         }
 
-      // Step 2b:  Choose the closest candidate successor and update the current node's successor if necessary
+      // Step 2b:  Choose the closest candidate successor and update the current node's successor list if necessary
       .flatMap { newSuccessor =>
         if (newSuccessor.id == currentSuccessor.id) {
           Future {
             newSuccessor
           }
         } else {
-          innerNodeRef.ask(UpdateSuccessor(newSuccessor.id, newSuccessor.ref))(requestTimeout)
-            .mapTo[UpdateSuccessorResponse]
+          innerNodeRef.ask(UpdateSuccessorList(newSuccessor, List.empty))(requestTimeout)
+            .mapTo[UpdateSuccessorListResponse]
             .map {
-              case UpdateSuccessorOk() => newSuccessor
-              case UpdateSuccessorInvalidRequest(message) => throw new Exception(message)
+              case UpdateSuccessorListOk() => newSuccessor
             }
         }
       }

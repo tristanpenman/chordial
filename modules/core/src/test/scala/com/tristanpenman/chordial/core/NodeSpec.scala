@@ -34,9 +34,9 @@ with BeforeAndAfterAll {
       expectMsg(GetPredecessorOkButUnknown())
     }
 
-    "respond to a GetSuccessor message with a GetSuccessorOk message containing the ID and ActorRef of a seed node" in {
-      node ! GetSuccessor()
-      expectMsg(GetSuccessorOk(seedId, seedRef))
+    "respond to a GetSuccessorList message with a GetSuccessorListOk containing node info for primary successor" in {
+      node ! GetSuccessorList()
+      expectMsg(GetSuccessorListOk(NodeInfo(seedId, seedRef), List.empty))
     }
   }
 

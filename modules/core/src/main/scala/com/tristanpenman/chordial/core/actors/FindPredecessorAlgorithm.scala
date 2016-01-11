@@ -3,7 +3,7 @@ package com.tristanpenman.chordial.core.actors
 import akka.actor.{ActorLogging, ActorRef, Actor, Props}
 import com.tristanpenman.chordial.core.Coordinator._
 import com.tristanpenman.chordial.core.Node._
-import com.tristanpenman.chordial.core.shared.Interval
+import com.tristanpenman.chordial.core.shared.{NodeInfo, Interval}
 
 /**
  * Actor class that implements the FindPredecessor algorithm
@@ -27,39 +27,39 @@ class FindPredecessorAlgorithm extends Actor with ActorLogging {
 
   import FindPredecessorAlgorithm._
 
-  def awaitGetSuccessor(queryId: Long, delegate: ActorRef, candidateId: Long, candidate: ActorRef): Actor.Receive = {
-    case GetSuccessorOk(successorId: Long, _) =>
+  def awaitGetSuccessorList(queryId: Long, delegate: ActorRef, candidate: NodeInfo): Actor.Receive = {
+    case GetSuccessorListOk(primarySuccessor: NodeInfo, _) =>
       // Check whether the query ID belongs to the candidate node's successor
-      if (Interval(candidateId + 1, successorId + 1).contains(queryId)) {
+      if (Interval(candidate.id + 1, primarySuccessor.id + 1).contains(queryId)) {
         // If the query ID belongs to the candidate node's successor, then we have successfully found the predecessor
-        delegate ! FindPredecessorAlgorithmOk(candidateId, candidate)
+        delegate ! FindPredecessorAlgorithmOk(candidate)
         context.stop(self)
       } else {
         // Otherwise, we need to choose the next node by the asking the current candidate node to return what it knows
         // to be the closest preceding finger for the query ID
-        candidate ! ClosestPrecedingFinger(queryId)
-        context.become(awaitClosestPrecedingFinger(queryId, delegate))
+        candidate.ref ! ClosestPrecedingNode(queryId)
+        context.become(awaitClosestPrecedingNode(queryId, delegate))
       }
 
-    case FindPredecessorAlgorithmStart(_, _, _) =>
+    case FindPredecessorAlgorithmStart(_, _) =>
       sender() ! FindPredecessorAlgorithmAlreadyRunning()
 
     case message =>
       log.warning("Received unexpected message while waiting for GetSuccessorResponse: {}", message)
   }
 
-  def awaitClosestPrecedingFinger(queryId: Long, delegate: ActorRef): Actor.Receive = {
-    case ClosestPrecedingFingerOk(candidateId, candidateRef) =>
+  def awaitClosestPrecedingNode(queryId: Long, delegate: ActorRef): Actor.Receive = {
+    case ClosestPrecedingNodeOk(candidate) =>
       // Now that we have the ID and ActorRef for the next candidate node, we can proceed to the next step of the
       // algorithm. This requires that we locate the successor of the candidate node.
-      candidateRef ! GetSuccessor()
-      context.become(awaitGetSuccessor(queryId, delegate, candidateId, candidateRef))
+      candidate.ref ! GetSuccessorList()
+      context.become(awaitGetSuccessorList(queryId, delegate, candidate))
 
-    case ClosestPrecedingFingerError(message: String) =>
+    case ClosestPrecedingNodeError(message: String) =>
       delegate ! FindPredecessorAlgorithmError(s"ClosestPrecedingFinder request failed with message: $message")
       context.stop(self)
 
-    case FindPredecessorAlgorithmStart(_, _, _) =>
+    case FindPredecessorAlgorithmStart(_, _) =>
       sender() ! FindPredecessorAlgorithmAlreadyRunning()
 
     case message =>
@@ -67,9 +67,9 @@ class FindPredecessorAlgorithm extends Actor with ActorLogging {
   }
 
   override def receive: Receive = {
-    case FindPredecessorAlgorithmStart(queryId: Long, initialNodeId: Long, initialNodeRef: ActorRef) =>
-      initialNodeRef ! GetSuccessor()
-      context.become(awaitGetSuccessor(queryId, sender(), initialNodeId, initialNodeRef))
+    case FindPredecessorAlgorithmStart(queryId: Long, initialNode: NodeInfo) =>
+      initialNode.ref ! GetSuccessorList()
+      context.become(awaitGetSuccessorList(queryId, sender(), initialNode))
 
     case message =>
       log.warning("Received unexpected message while waiting for FindPredecessorAlgorithmStart: {}", message)
@@ -78,14 +78,13 @@ class FindPredecessorAlgorithm extends Actor with ActorLogging {
 
 object FindPredecessorAlgorithm {
 
-  case class FindPredecessorAlgorithmStart(queryId: Long, initialNodeId: Long, initialNodeRef: ActorRef)
+  case class FindPredecessorAlgorithmStart(queryId: Long, initialNode: NodeInfo)
 
   sealed trait FindPredecessorAlgorithmStartResponse
 
   case class FindPredecessorAlgorithmAlreadyRunning() extends FindPredecessorAlgorithmStartResponse
 
-  case class FindPredecessorAlgorithmOk(predecessorId: Long, predecessor: ActorRef)
-    extends FindPredecessorAlgorithmStartResponse
+  case class FindPredecessorAlgorithmOk(predecessor: NodeInfo) extends FindPredecessorAlgorithmStartResponse
 
   case class FindPredecessorAlgorithmError(message: String) extends FindPredecessorAlgorithmStartResponse
 
