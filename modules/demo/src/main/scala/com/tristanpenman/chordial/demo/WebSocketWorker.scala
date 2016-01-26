@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.daemon
+package com.tristanpenman.chordial.demo
 
 import akka.actor._
 import com.tristanpenman.chordial.core.Event

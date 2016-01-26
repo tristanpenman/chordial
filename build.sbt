@@ -24,7 +24,7 @@ lazy val core = project.in(file("modules/core"))
     "org.scalatest" %% "scalatest" % scalatestVersion % "test"
   ))
 
-lazy val daemon = project.in(file("modules/daemon"))
+lazy val demo = project.in(file("modules/demo"))
   .dependsOn(core)
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(

@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.daemon
+package com.tristanpenman.chordial.demo
 
 import akka.actor.{Props, Actor, ActorLogging}
 import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorListUpdated}

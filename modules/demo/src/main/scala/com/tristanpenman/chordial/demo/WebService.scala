@@ -1,9 +1,9 @@
-package com.tristanpenman.chordial.daemon
+package com.tristanpenman.chordial.demo
 
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import com.tristanpenman.chordial.daemon.Governor._
+import com.tristanpenman.chordial.demo.Governor._
 import spray.http.MediaTypes._
 import spray.http.StatusCodes
 import spray.httpx.marshalling.ToResponseMarshallable

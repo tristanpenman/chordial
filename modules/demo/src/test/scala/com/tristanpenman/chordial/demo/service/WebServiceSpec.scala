@@ -1,10 +1,10 @@
-package com.tristanpenman.chordial.daemon.service
+package com.tristanpenman.chordial.demo.service
 
 import akka.actor.{ActorSystem, Actor, ActorRef}
 import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.NodeInfo
-import com.tristanpenman.chordial.daemon.WebService
+import com.tristanpenman.chordial.demo.WebService
 import org.scalatest.{FlatSpec, ShouldMatchers}
 import spray.testkit.ScalatestRouteTest
 

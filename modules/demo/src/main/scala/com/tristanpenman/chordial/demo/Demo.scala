@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.daemon
+package com.tristanpenman.chordial.demo
 
 import akka.actor.ActorSystem
 import akka.io.IO
@@ -11,9 +11,9 @@ import spray.can.server.UHttp
 import scala.concurrent.duration._
 import scala.io.StdIn
 
-object Daemon extends App {
+object Demo extends App {
 
-  implicit val system = ActorSystem("chordial-daemon")
+  implicit val system = ActorSystem("chordial-demo")
 
   implicit val timeout: Timeout = 3.seconds
 
