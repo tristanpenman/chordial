@@ -4,13 +4,13 @@ import akka.actor._
 import akka.event.EventStream
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.actors.CheckPredecessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.ClosestPrecedingNodeAlgorithm._
-import com.tristanpenman.chordial.core.actors.FindPredecessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.FindSuccessorAlgorithm._
-import com.tristanpenman.chordial.core.actors.NotifyAlgorithm._
-import com.tristanpenman.chordial.core.actors.StabilisationAlgorithm._
-import com.tristanpenman.chordial.core.actors._
+import com.tristanpenman.chordial.core.algorithms.CheckPredecessorAlgorithm._
+import com.tristanpenman.chordial.core.algorithms.ClosestPrecedingNodeAlgorithm._
+import com.tristanpenman.chordial.core.algorithms.FindPredecessorAlgorithm._
+import com.tristanpenman.chordial.core.algorithms.FindSuccessorAlgorithm._
+import com.tristanpenman.chordial.core.algorithms.NotifyAlgorithm._
+import com.tristanpenman.chordial.core.algorithms.StabilisationAlgorithm._
+import com.tristanpenman.chordial.core.algorithms._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global

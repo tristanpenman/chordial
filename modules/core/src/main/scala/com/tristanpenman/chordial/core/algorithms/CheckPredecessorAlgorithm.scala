@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.core.actors
+package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor._
 import akka.pattern.ask

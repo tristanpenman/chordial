@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.core.actors
+package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor.{ActorLogging, Actor, ActorRef, Props}
 import com.tristanpenman.chordial.core.Pointers._

@@ -1,4 +1,4 @@
-package com.tristanpenman.chordial.core.actors
+package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.ask
