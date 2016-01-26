@@ -3,7 +3,7 @@ package com.tristanpenman.chordial.core.actors
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.ask
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Coordinator._
+import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 

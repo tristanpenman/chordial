@@ -16,11 +16,11 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
-class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalRequestTimeout: Timeout,
+class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalRequestTimeout: Timeout,
                   livenessCheckDuration: Duration, eventStream: EventStream)
   extends Actor with ActorLogging {
 
-  import Coordinator._
+  import Node._
   import Pointers._
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
@@ -245,7 +245,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
   }
 }
 
-object Coordinator {
+object Node {
 
   sealed trait Request
 
@@ -325,5 +325,5 @@ object Coordinator {
 
   def props(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, requestTimeout: Timeout,
             livenessCheckDuration: Duration, eventStream: EventStream): Props =
-    Props(new Coordinator(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, livenessCheckDuration, eventStream))
+    Props(new Node(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, livenessCheckDuration, eventStream))
 }

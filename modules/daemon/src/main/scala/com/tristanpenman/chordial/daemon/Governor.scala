@@ -3,8 +3,8 @@ package com.tristanpenman.chordial.daemon
 import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Coordinator
-import com.tristanpenman.chordial.core.Coordinator._
+import com.tristanpenman.chordial.core.Node
+import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Event.NodeShuttingDown
 import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
 
@@ -26,7 +26,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   // How long to wait when making requests that may be routed to other nodes
   private val externalRequestTimeout = Timeout(500.milliseconds)
 
-  // How long Coordinator should wait until an algorithm is considered to have timed out. This should be significantly
+  // How long Node should wait until an algorithm is considered to have timed out. This should be significantly
   // longer than the external request timeout, as some algorithms will make multiple external requests before
   // running to completion
   private val algorithmTimeout = Timeout(5000.milliseconds)
@@ -94,7 +94,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
     }
 
   private def createNode(nodeId: Long): ActorRef = {
-    context.system.actorOf(Coordinator.props(nodeId, keyspaceBits, algorithmTimeout, externalRequestTimeout,
+    context.system.actorOf(Node.props(nodeId, keyspaceBits, algorithmTimeout, externalRequestTimeout,
       livenessCheckDuration, context.system.eventStream))
   }
 
