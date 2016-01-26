@@ -2,11 +2,11 @@ package com.tristanpenman.chordial.core
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
-import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
-class NodeSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with Matchers
+class PointersSpec(_system: ActorSystem) extends TestKit(_system) with ImplicitSender with WordSpecLike with Matchers
 with BeforeAndAfterAll {
 
   def this() = this(ActorSystem("NodeSpec"))
@@ -22,7 +22,7 @@ with BeforeAndAfterAll {
     val seedId = 2L
     val seedRef = self
 
-    val node: ActorRef = system.actorOf(Node.props(ownId, keyspaceBits, NodeInfo(seedId, seedRef), system.eventStream))
+    val node: ActorRef = system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, seedRef), system.eventStream))
 
     "respond to a GetId message with a GetIdOk message containing its ID" in {
       node ! GetId()

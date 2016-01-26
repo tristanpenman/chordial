@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Coordinator._
-import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -49,7 +49,7 @@ import scala.language.postfixOps
  * When the algorithm completes, a \c StabilisationAlgorithmFinished or \c StabilisationAlgorithmError message will be
  * sent to the original sender, depending on the outcome.
  */
-class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout)
+class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: ActorRef, initialRequestTimeout: Timeout)
   extends Actor with ActorLogging {
 
   import StabilisationAlgorithm._
@@ -58,15 +58,15 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
    * Execute the 'stabilisation' algorithm asynchronously
    *
    * @param node current node
-   * @param innerNodeRef current node's internal link data
+   * @param pointersRef current node's network pointer data
    * @param requestTimeout time to wait on requests to external resources
    *
    * @return a \c Future that will complete once the updated successor has been notified of the current node
    */
-  private def runAsync(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
+  private def runAsync(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
 
     // Step 1:  Get the successor for the current node
-    innerNodeRef.ask(GetSuccessorList())(requestTimeout)
+    pointersRef.ask(GetSuccessorList())(requestTimeout)
       .mapTo[GetSuccessorListResponse]
       .map {
         case GetSuccessorListOk(primarySuccessor, _) => primarySuccessor
@@ -92,7 +92,7 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
             primarySuccessor :: backupSuccessors.dropRight(1)
         }
         .flatMap { backupSuccessors =>
-          innerNodeRef.ask(UpdateSuccessorList(closestSuccessor, backupSuccessors))(requestTimeout)
+          pointersRef.ask(UpdateSuccessorList(closestSuccessor, backupSuccessors))(requestTimeout)
             .mapTo[UpdateSuccessorListResponse]
             .map {
               case UpdateSuccessorListOk() => closestSuccessor
@@ -115,15 +115,15 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
     case StabilisationAlgorithmStart() =>
       sender() ! StabilisationAlgorithmAlreadyRunning()
 
-    case StabilisationAlgorithmReset(newNode, newInnerNodeRef, newRequestTimeout) =>
-      context.become(ready(newNode, newInnerNodeRef, newRequestTimeout))
+    case StabilisationAlgorithmReset(newNode, newPointersRef, newRequestTimeout) =>
+      context.become(ready(newNode, newPointersRef, newRequestTimeout))
       sender() ! StabilisationAlgorithmReady()
   }
 
-  private def ready(node: NodeInfo, innerNodeRef: ActorRef, requestTimeout: Timeout): Receive = {
+  private def ready(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Receive = {
     case StabilisationAlgorithmStart() =>
       val replyTo = sender()
-      runAsync(node, innerNodeRef, requestTimeout).onComplete {
+      runAsync(node, pointersRef, requestTimeout).onComplete {
         case util.Success(()) =>
           replyTo ! StabilisationAlgorithmFinished()
         case util.Failure(exception) =>
@@ -131,12 +131,12 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialInnerNodeRef: ActorRe
       }
       context.become(running())
 
-    case StabilisationAlgorithmReset(newNode, newInnerNodeRef, newRequestTimeout) =>
-      context.become(ready(newNode, newInnerNodeRef, newRequestTimeout))
+    case StabilisationAlgorithmReset(newNode, newPointersRef, newRequestTimeout) =>
+      context.become(ready(newNode, newPointersRef, newRequestTimeout))
       sender() ! StabilisationAlgorithmReady()
   }
 
-  override def receive: Receive = ready(initialNode, initialInnerNodeRef, initialRequestTimeout)
+  override def receive: Receive = ready(initialNode, initialPointersRef, initialRequestTimeout)
 }
 
 object StabilisationAlgorithm {
@@ -145,7 +145,7 @@ object StabilisationAlgorithm {
 
   case class StabilisationAlgorithmStart() extends StabilisationAlgorithmRequest
 
-  case class StabilisationAlgorithmReset(newNode: NodeInfo, newInnerNodeRef: ActorRef, newRequestTimeout: Timeout)
+  case class StabilisationAlgorithmReset(newNode: NodeInfo, newPointersRef: ActorRef, newRequestTimeout: Timeout)
     extends StabilisationAlgorithmRequest
 
   sealed trait StabilisationAlgorithmStartResponse
@@ -160,6 +160,6 @@ object StabilisationAlgorithm {
 
   case class StabilisationAlgorithmReady() extends StabilisationAlgorithmResetResponse
 
-  def props(initialNode: NodeInfo, initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout): Props =
-    Props(new StabilisationAlgorithm(initialNode, initialInnerNodeRef, initialRequestTimeout))
+  def props(initialNode: NodeInfo, initialPointersRef: ActorRef, initialRequestTimeout: Timeout): Props =
+    Props(new StabilisationAlgorithm(initialNode, initialPointersRef, initialRequestTimeout))
 }

@@ -21,7 +21,7 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
   extends Actor with ActorLogging {
 
   import Coordinator._
-  import Node._
+  import Pointers._
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
 
@@ -34,14 +34,14 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
   require(nodeId >= 0, "ownId must be a non-negative Long value")
   require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
 
-  private def newNode(nodeId: Long, seedId: Long, seedRef: ActorRef) =
-    context.actorOf(Node.props(nodeId, fingerTableSize, NodeInfo(seedId, seedRef), eventStream))
+  private def newPointers(nodeId: Long, seedId: Long, seedRef: ActorRef) =
+    context.actorOf(Pointers.props(nodeId, fingerTableSize, NodeInfo(seedId, seedRef), eventStream))
 
   private def newCheckPredecessorAlgorithm(nodeRef: ActorRef) =
     context.actorOf(CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
 
-  private def newStabilisationAlgorithm(innerNodeRef: ActorRef) =
-    context.actorOf(StabilisationAlgorithm.props(NodeInfo(nodeId, self), innerNodeRef, externalRequestTimeout))
+  private def newStabilisationAlgorithm(pointersRef: ActorRef) =
+    context.actorOf(StabilisationAlgorithm.props(NodeInfo(nodeId, self), pointersRef, externalRequestTimeout))
 
   private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef) = {
     checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart())(algorithmTimeout)
@@ -226,8 +226,9 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
       context.stop(nodeRef)
       context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
-      val newInnerNode = newNode(nodeId, seedId, seedRef)
-      context.become(receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(newInnerNode), newStabilisationAlgorithm(newInnerNode)))
+      val newPointersRef = newPointers(nodeId, seedId, seedRef)
+      context.become(receiveWhileReady(newPointersRef, newCheckPredecessorAlgorithm(newPointersRef),
+        newStabilisationAlgorithm(newPointersRef)))
       sender() ! JoinOk()
 
     case Notify(candidateId, candidateRef) =>
@@ -238,8 +239,9 @@ class Coordinator(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, ex
   }
 
   override def receive: Receive = {
-    val newInnerNode = newNode(nodeId, nodeId, self)
-    receiveWhileReady(newInnerNode, newCheckPredecessorAlgorithm(newInnerNode), newStabilisationAlgorithm(newInnerNode))
+    val newPointersRef = newPointers(nodeId, nodeId, self)
+    receiveWhileReady(newPointersRef, newCheckPredecessorAlgorithm(newPointersRef),
+      newStabilisationAlgorithm(newPointersRef))
   }
 }
 

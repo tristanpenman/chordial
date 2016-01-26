@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.core.actors
 
 import akka.actor.{ActorLogging, Actor, ActorRef, Props}
-import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 /**
@@ -31,10 +31,10 @@ class NotifyAlgorithm extends Actor with ActorLogging {
       log.warning("Received unexpected message while waiting for UpdatePredecessorResponse: {}", message)
   }
 
-  def awaitGetPredecessor(delegate: ActorRef, node: NodeInfo, candidate: NodeInfo, innerNodeRef: ActorRef): Receive = {
+  def awaitGetPredecessor(delegate: ActorRef, node: NodeInfo, candidate: NodeInfo, pointersRef: ActorRef): Receive = {
     case GetPredecessorOk(predecessor) =>
       if (Interval(predecessor.id + 1, node.id).contains(candidate.id)) {
-        innerNodeRef ! UpdatePredecessor(candidate)
+        pointersRef ! UpdatePredecessor(candidate)
         context.become(awaitUpdatePredecessor(delegate))
       } else {
         delegate ! NotifyAlgorithmOk(false)
@@ -42,7 +42,7 @@ class NotifyAlgorithm extends Actor with ActorLogging {
       }
 
     case GetPredecessorOkButUnknown() =>
-      innerNodeRef ! UpdatePredecessor(candidate)
+      pointersRef ! UpdatePredecessor(candidate)
       context.become(awaitUpdatePredecessor(delegate))
 
     case NotifyAlgorithmStart(_, _, _) =>
@@ -53,9 +53,9 @@ class NotifyAlgorithm extends Actor with ActorLogging {
   }
 
   override def receive: Receive = {
-    case NotifyAlgorithmStart(node, candidate, innerNodeRef) =>
-      innerNodeRef ! GetPredecessor()
-      context.become(awaitGetPredecessor(sender(), node, candidate, innerNodeRef))
+    case NotifyAlgorithmStart(node, candidate, pointersRef) =>
+      pointersRef ! GetPredecessor()
+      context.become(awaitGetPredecessor(sender(), node, candidate, pointersRef))
 
     case message =>
       log.warning("Received unexpected message while waiting for NotifyAlgorithmStart: {}", message)
@@ -64,7 +64,7 @@ class NotifyAlgorithm extends Actor with ActorLogging {
 
 object NotifyAlgorithm {
 
-  case class NotifyAlgorithmStart(node: NodeInfo, candidate: NodeInfo, innerNodeRef: ActorRef)
+  case class NotifyAlgorithmStart(node: NodeInfo, candidate: NodeInfo, pointersRef: ActorRef)
 
   sealed trait NotifyAlgorithmStartResponse
 

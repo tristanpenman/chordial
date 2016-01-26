@@ -3,7 +3,7 @@ package com.tristanpenman.chordial.core.actors
 import akka.actor._
 import akka.pattern.ask
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.Pointers._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -37,7 +37,7 @@ import scala.language.postfixOps
  * When the algorithm completes, a \c CheckPredecessorAlgorithmFinished or \c CheckPredecessorAlgorithmError message
  * will be sent to the original sender, depending on the outcome.
  */
-class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout)
+class CheckPredecessorAlgorithm(initialPointersRef: ActorRef, initialRequestTimeout: Timeout)
   extends Actor with ActorLogging {
 
   import CheckPredecessorAlgorithm._
@@ -45,15 +45,15 @@ class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTim
   /**
    * Execute the 'check_predecessor' algorithm asynchronously
    *
-   * @param innerNodeRef current node's internal link data
+   * @param pointersRef current node's internal link data
    * @param requestTimeout time to wait on requests to external resources
    *
    * @return a \c Future that will complete once the predecessor has been contacted, or its pointer reset
    */
-  private def runAsync(innerNodeRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
+  private def runAsync(pointersRef: ActorRef, requestTimeout: Timeout): Future[Unit] = {
 
     // Step 1: Find predecessor for current node
-    innerNodeRef.ask(GetPredecessor())(requestTimeout)
+    pointersRef.ask(GetPredecessor())(requestTimeout)
       .mapTo[GetPredecessorResponse]
       .map {
         case GetPredecessorOk(predecessor) =>
@@ -80,7 +80,7 @@ class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTim
     // Step 3: Reset predecessor pointer if necessary, and wait for acknowledgement
     .flatMap { shouldResetPredecessor =>
       if (shouldResetPredecessor) {
-        innerNodeRef.ask(ResetPredecessor())(requestTimeout)
+        pointersRef.ask(ResetPredecessor())(requestTimeout)
           .mapTo[ResetPredecessorResponse]
           .map {
             case ResetPredecessorOk() =>
@@ -95,15 +95,15 @@ class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTim
     case CheckPredecessorAlgorithmStart() =>
       sender() ! CheckPredecessorAlgorithmAlreadyRunning()
 
-    case CheckPredecessorAlgorithmReset(newInnerNodeRef, newRequestTimeout) =>
-      context.become(ready(newInnerNodeRef, newRequestTimeout))
+    case CheckPredecessorAlgorithmReset(newPointersRef, newRequestTimeout) =>
+      context.become(ready(newPointersRef, newRequestTimeout))
       sender() ! CheckPredecessorAlgorithmReady()
   }
 
-  private def ready(innerNodeRef: ActorRef, requestTimeout: Timeout): Receive = {
+  private def ready(pointersRef: ActorRef, requestTimeout: Timeout): Receive = {
     case CheckPredecessorAlgorithmStart() =>
       var replyTo = sender()
-      runAsync(innerNodeRef, requestTimeout).onComplete {
+      runAsync(pointersRef, requestTimeout).onComplete {
         case util.Success(()) =>
           replyTo ! CheckPredecessorAlgorithmFinished()
         case util.Failure(exception) =>
@@ -111,12 +111,12 @@ class CheckPredecessorAlgorithm(initialInnerNodeRef: ActorRef, initialRequestTim
       }
       context.become(running())
 
-    case CheckPredecessorAlgorithmReset(newInnerNodeRef, newRequestTimeout) =>
-      context.become(ready(newInnerNodeRef, newRequestTimeout))
+    case CheckPredecessorAlgorithmReset(newPointersRef, newRequestTimeout) =>
+      context.become(ready(newPointersRef, newRequestTimeout))
       sender() ! CheckPredecessorAlgorithmReady()
   }
 
-  override def receive: Receive = ready(initialInnerNodeRef, initialRequestTimeout)
+  override def receive: Receive = ready(initialPointersRef, initialRequestTimeout)
 }
 
 object CheckPredecessorAlgorithm {
@@ -125,7 +125,7 @@ object CheckPredecessorAlgorithm {
 
   case class CheckPredecessorAlgorithmStart()
 
-  case class CheckPredecessorAlgorithmReset(newInnerNodeRef: ActorRef, newRequestTimeout: Timeout)
+  case class CheckPredecessorAlgorithmReset(newPointersRef: ActorRef, newRequestTimeout: Timeout)
     extends CheckPredecessorAlgorithmRequest
 
   sealed trait CheckPredecessorAlgorithmStartResponse
@@ -140,7 +140,7 @@ object CheckPredecessorAlgorithm {
 
   case class CheckPredecessorAlgorithmReady() extends CheckPredecessorAlgorithmResetResponse
 
-  def props(initialInnerNodeRef: ActorRef, initialRequestTimeout: Timeout): Props =
-    Props(new CheckPredecessorAlgorithm(initialInnerNodeRef, initialRequestTimeout))
+  def props(initialPointersRef: ActorRef, initialRequestTimeout: Timeout): Props =
+    Props(new CheckPredecessorAlgorithm(initialPointersRef, initialRequestTimeout))
 
 }

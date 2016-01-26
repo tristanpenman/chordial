@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.core.actors
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import com.tristanpenman.chordial.core.Node.{GetSuccessorList, GetSuccessorListOk}
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk}
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 /**
@@ -42,8 +42,8 @@ class ClosestPrecedingNodeAlgorithm extends Actor with ActorLogging {
   }
 
   override def receive: Receive = {
-    case ClosestPrecedingNodeAlgorithmStart(queryId, node, innerNodeRef) =>
-      innerNodeRef ! GetSuccessorList()
+    case ClosestPrecedingNodeAlgorithmStart(queryId, node, pointersRef) =>
+      pointersRef ! GetSuccessorList()
       context.become(awaitGetSuccessorList(sender(), queryId, node))
 
     case message =>
@@ -54,7 +54,7 @@ class ClosestPrecedingNodeAlgorithm extends Actor with ActorLogging {
 
 object ClosestPrecedingNodeAlgorithm {
 
-  case class ClosestPrecedingNodeAlgorithmStart(queryId: Long, node: NodeInfo, innerNodeRef: ActorRef)
+  case class ClosestPrecedingNodeAlgorithmStart(queryId: Long, node: NodeInfo, pointersRef: ActorRef)
 
   sealed trait ClosestPrecedingNodeAlgorithmStartResponse
 

@@ -5,10 +5,10 @@ import akka.event.EventStream
 import com.tristanpenman.chordial.core.Event._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
-class Node(ownId: Long, fingerTableSize: Int, seed: NodeInfo, eventStream: EventStream)
+class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStream: EventStream)
   extends Actor with ActorLogging {
 
-  import Node._
+  import Pointers._
 
   private def newFingerTable = Vector.fill(fingerTableSize) {
     None
@@ -17,7 +17,7 @@ class Node(ownId: Long, fingerTableSize: Int, seed: NodeInfo, eventStream: Event
   private def receiveWhileReady(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo],
                                 predecessor: Option[NodeInfo], fingerTable: Vector[Option[NodeInfo]]): Receive = {
     case GetId() =>
-      sender() ! GetIdOk(ownId)
+      sender() ! GetIdOk(nodeId)
 
     case GetPredecessor() =>
       predecessor match {
@@ -37,13 +37,13 @@ class Node(ownId: Long, fingerTableSize: Int, seed: NodeInfo, eventStream: Event
         context.become(receiveWhileReady(primarySuccessor, backupSuccessors, predecessor,
           fingerTable.updated(index, None)))
         sender() ! ResetFingerOk()
-        eventStream.publish(FingerReset(ownId, index))
+        eventStream.publish(FingerReset(nodeId, index))
       }
 
     case ResetPredecessor() =>
       context.become(receiveWhileReady(primarySuccessor, backupSuccessors, None, fingerTable))
       sender() ! ResetPredecessorOk()
-      eventStream.publish(PredecessorReset(ownId))
+      eventStream.publish(PredecessorReset(nodeId))
 
     case UpdateFinger(index: Int, finger: NodeInfo) =>
       if (index < 0 || index >= fingerTableSize) {
@@ -52,30 +52,30 @@ class Node(ownId: Long, fingerTableSize: Int, seed: NodeInfo, eventStream: Event
         context.become(receiveWhileReady(primarySuccessor, backupSuccessors, predecessor,
           fingerTable.updated(index, Some(finger))))
         sender() ! UpdateFingerOk()
-        eventStream.publish(FingerUpdated(ownId, index, finger.id))
+        eventStream.publish(FingerUpdated(nodeId, index, finger.id))
       }
 
     case UpdatePredecessor(newPredecessor) =>
       context.become(receiveWhileReady(primarySuccessor, backupSuccessors, Some(newPredecessor), fingerTable))
       sender() ! UpdatePredecessorOk()
-      eventStream.publish(PredecessorUpdated(ownId, newPredecessor.id))
+      eventStream.publish(PredecessorUpdated(nodeId, newPredecessor.id))
 
     case UpdateSuccessorList(newPrimarySuccessor, newBackupSuccessors) =>
       if (newPrimarySuccessor != primarySuccessor || newBackupSuccessors != backupSuccessors) {
         context.become(receiveWhileReady(newPrimarySuccessor, newBackupSuccessors, predecessor, fingerTable))
         sender() ! UpdateSuccessorListOk()
-        eventStream.publish(SuccessorListUpdated(ownId, newPrimarySuccessor.id, newBackupSuccessors.map(_.id)))
+        eventStream.publish(SuccessorListUpdated(nodeId, newPrimarySuccessor.id, newBackupSuccessors.map(_.id)))
       } else {
         sender() ! UpdateSuccessorListOk()
       }
   }
 
-  eventStream.publish(NodeCreated(ownId, seed.id))
+  eventStream.publish(NodeCreated(nodeId, seedNode.id))
 
-  override def receive: Receive = receiveWhileReady(seed, List.empty, None, newFingerTable)
+  override def receive: Receive = receiveWhileReady(seedNode, List.empty, None, newFingerTable)
 }
 
-object Node {
+object Pointers {
 
   sealed trait Request
 
@@ -137,5 +137,5 @@ object Node {
   case class UpdateSuccessorListOk() extends UpdateSuccessorListResponse
 
   def props(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream): Props =
-    Props(new Node(ownId, keyspaceBits, seed, eventStream))
+    Props(new Pointers(ownId, keyspaceBits, seed, eventStream))
 }

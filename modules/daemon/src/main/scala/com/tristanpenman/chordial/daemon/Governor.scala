@@ -6,7 +6,7 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Coordinator
 import com.tristanpenman.chordial.core.Coordinator._
 import com.tristanpenman.chordial.core.Event.NodeShuttingDown
-import com.tristanpenman.chordial.core.Node.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
 
 import scala.annotation.tailrec
 import scala.concurrent.Await
