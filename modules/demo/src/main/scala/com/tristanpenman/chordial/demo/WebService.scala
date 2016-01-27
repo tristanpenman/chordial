@@ -13,15 +13,15 @@ import spray.routing._
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-case class NodeAttributes(nodeId: Long, successorId: Option[Long], active: Boolean)
+object WebService extends DefaultJsonProtocol {
+  case class NodeAttributes(nodeId: Long, successorId: Option[Long], active: Boolean)
 
-object JsonProtocol extends DefaultJsonProtocol {
   implicit val nodeAttributeFormat = jsonFormat3(NodeAttributes)
 }
 
 trait WebService extends HttpService {
 
-  import JsonProtocol._
+  import WebService._
 
   implicit def ec: ExecutionContextExecutor = actorRefFactory.dispatcher
 
@@ -48,7 +48,9 @@ trait WebService extends HttpService {
               throw new Exception(message)
           }
       } else {
-        Future { NodeAttributes(nodeId, None, active = false) }
+        Future {
+          NodeAttributes(nodeId, None, active = false)
+        }
       }
     }
 

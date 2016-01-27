@@ -1,42 +1,35 @@
 package com.tristanpenman.chordial.demo.service
 
-import akka.actor.{ActorSystem, Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.TestActorRef
-import com.tristanpenman.chordial.core.Pointers._
-import com.tristanpenman.chordial.core.shared.NodeInfo
+import com.tristanpenman.chordial.demo.Governor.{GetNodeIdSet, GetNodeIdSetOk}
 import com.tristanpenman.chordial.demo.WebService
-import org.scalatest.{FlatSpec, ShouldMatchers}
+import org.scalatest.{ShouldMatchers, WordSpec}
+import spray.json._
 import spray.testkit.ScalatestRouteTest
 
-class WebServiceSpec extends FlatSpec with ShouldMatchers with WebService with ScalatestRouteTest {
+class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with ScalatestRouteTest {
+
+  import WebService._
+
   def actorRefFactory: ActorSystem = system
 
   override protected def governor: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
-      case GetId() =>
-        sender() ! GetIdOk(0L)
-      case GetPredecessor() =>
-        sender() ! GetPredecessorOk(NodeInfo(-1L, self))
-      case GetSuccessorList() =>
-        sender() ! GetSuccessorListOk(NodeInfo(1L, self), List.empty)
+      case GetNodeIdSet() =>
+        sender() ! GetNodeIdSetOk(Set.empty)
     }
   })
 
-  "The service" should "return its own ID for GET requests to the / endpoint" in {
-    Get() ~> routes ~> check {
-      responseAs[String] should be("0")
-    }
-  }
-
-  "The service" should "return the ID of the predecessor for GET requests to the /predecessor endpoint" in {
-    Get("/predecessor") ~> routes ~> check {
-      responseAs[String] should be("-1")
-    }
-  }
-
-  "The service" should "return the ID of the successor for GET requests to the /successor endpoint" in {
-    Get("/successor") ~> routes ~> check {
-      responseAs[String] should be("1")
+  "The web service" when {
+    "backed by a Governor with no nodes" should {
+      "respond to GET requests on the /nodes endpoint with an empty JSON array" in {
+        Get("/nodes") ~> routes ~> check {
+          val jsonAst = responseAs[String].parseJson
+          val jsonAsNodeAttrArray = jsonAst.convertTo[Iterable[NodeAttributes]]
+          assert(jsonAsNodeAttrArray.isEmpty)
+        }
+      }
     }
   }
 }
