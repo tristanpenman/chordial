@@ -12,7 +12,7 @@ import spray.routing.HttpServiceActor
 class WebSocketWorker(val serverConnection: ActorRef, val governor: ActorRef)
   extends HttpServiceActor with websocket.WebSocketServerWorker with WebService {
 
-  private def routesWithEventStream = routes ~ pathPrefix("eventstream") {
+  private def routesWithEventStream = routes(governor) ~ pathPrefix("eventstream") {
     getFromResourceDirectory("webapp")
   }
 
