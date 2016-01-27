@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.demo.service
 
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.TestActorRef
-import com.tristanpenman.chordial.demo.Governor.{CreateNodeOk, CreateNode, GetNodeIdSet, GetNodeIdSetOk}
+import com.tristanpenman.chordial.demo.Governor._
 import com.tristanpenman.chordial.demo.WebService
 import org.scalatest.{ShouldMatchers, WordSpec}
 import spray.json._
@@ -25,6 +25,8 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
     def receive: Receive = {
       case CreateNode() =>
         sender() ! CreateNodeOk(1L, dummyActor)
+      case CreateNodeWithSeed(seedId) =>
+        sender() ! CreateNodeWithSeedOk(2L, dummyActor)
       case GetNodeIdSet() =>
         sender() ! GetNodeIdSetOk(Set.empty)
     }
@@ -39,11 +41,20 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
           assert(jsonAsNodeAttrArray.isEmpty)
         }
       }
-      "respond to a POST request on the /nodes endpoint by returning an appropriate JSON object" in {
+      "respond to a POST request on the /nodes endpoint with the correct JSON object" in {
         Post("/nodes") ~> routes ~> check {
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
           assert(jsonAsNodeAttr.nodeId == 1L)
+          assert(jsonAsNodeAttr.successorId.contains(1L))
+          assert(jsonAsNodeAttr.active)
+        }
+      }
+      "respond to a POST request on the /nodes endpoint (including a seed ID) with the correct JSON object" in {
+        Post("/nodes?seed_id=1") ~> routes ~> check {
+          val jsonAst = responseAs[String].parseJson
+          val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
+          assert(jsonAsNodeAttr.nodeId == 2L)
           assert(jsonAsNodeAttr.successorId.contains(1L))
           assert(jsonAsNodeAttr.active)
         }
