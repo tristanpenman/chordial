@@ -27,9 +27,7 @@ trait WebService extends HttpService {
 
   implicit val timeout: Timeout = 3.seconds
 
-  protected def governor: ActorRef
-
-  private def getNodeAttributes(nodeId: Long): Future[NodeAttributes] = governor.ask(GetNodeState(nodeId))
+  private def getNodeAttributes(governor: ActorRef, nodeId: Long): Future[NodeAttributes] = governor.ask(GetNodeState(nodeId))
     .mapTo[GetNodeStateResponse]
     .map {
       case GetNodeStateOk(active) =>
@@ -54,16 +52,16 @@ trait WebService extends HttpService {
       }
     }
 
-  private def getNodes: Future[Iterable[NodeAttributes]] = governor.ask(GetNodeIdSet())
+  private def getNodes(governor: ActorRef): Future[Iterable[NodeAttributes]] = governor.ask(GetNodeIdSet())
     .mapTo[GetNodeIdSetResponse]
     .flatMap {
       case GetNodeIdSetOk(nodeIdSet) =>
         Future.sequence(
-          nodeIdSet.map { case nodeId => getNodeAttributes(nodeId) }
+          nodeIdSet.map { case nodeId => getNodeAttributes(governor, nodeId) }
         )
     }
 
-  private def terminateNode(nodeId: Long): Future[Unit] = governor.ask(TerminateNode(nodeId))
+  private def terminateNode(governor: ActorRef, nodeId: Long): Future[Unit] = governor.ask(TerminateNode(nodeId))
     .mapTo[TerminateNodeResponse]
     .map {
       case TerminateNodeResponseOk() =>
@@ -71,12 +69,12 @@ trait WebService extends HttpService {
         throw new Exception(message)
     }
 
-  val routes = pathPrefix("nodes") {
+  protected def routes(governor: ActorRef) = pathPrefix("nodes") {
     pathEnd {
       get {
         respondWithMediaType(`application/json`) {
           complete {
-            ToResponseMarshallable.isMarshallable(getNodes.map {
+            ToResponseMarshallable.isMarshallable(getNodes(governor).map {
               _.toJson.compactPrint
             })
           }
@@ -121,7 +119,7 @@ trait WebService extends HttpService {
       nodeId => get {
         respondWithMediaType(`application/json`) {
           complete {
-            ToResponseMarshallable.isMarshallable(getNodeAttributes(nodeId).map {
+            ToResponseMarshallable.isMarshallable(getNodeAttributes(governor, nodeId).map {
               _.toJson.compactPrint
             })
           }
@@ -129,7 +127,7 @@ trait WebService extends HttpService {
       } ~ delete {
         complete {
           ToResponseMarshallable.isMarshallable(
-            terminateNode(nodeId).map { _ => StatusCodes.OK }
+            terminateNode(governor, nodeId).map { _ => StatusCodes.OK }
           )
         }
       }
