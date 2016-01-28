@@ -14,6 +14,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
 object WebService extends DefaultJsonProtocol {
+
   case class NodeAttributes(nodeId: Long, successorId: Option[Long], active: Boolean)
 
   implicit val nodeAttributeFormat = jsonFormat3(NodeAttributes)
@@ -27,30 +28,34 @@ trait WebService extends HttpService {
 
   implicit val timeout: Timeout = 3.seconds
 
-  private def getNodeAttributes(governor: ActorRef, nodeId: Long): Future[NodeAttributes] = governor.ask(GetNodeState(nodeId))
-    .mapTo[GetNodeStateResponse]
-    .map {
-      case GetNodeStateOk(active) =>
-        active
-      case GetNodeStateError(message) =>
-        throw new Exception(message)
-    }
-    .flatMap { case active =>
-      if (active) {
-        governor.ask(GetNodeSuccessorId(nodeId))
-          .mapTo[GetNodeSuccessorIdResponse]
-          .map {
-            case GetNodeSuccessorIdOk(successorId) =>
-              NodeAttributes(nodeId, Some(successorId), active = true)
-            case GetNodeSuccessorIdError(message) =>
-              throw new Exception(message)
+  private def messageForInternalServerError =
+    "The request failed due to an internal server error. Details will be available in the server logs."
+
+  private def getNodeAttributes(governor: ActorRef, nodeId: Long): Future[NodeAttributes] =
+    governor.ask(GetNodeState(nodeId))
+      .mapTo[GetNodeStateResponse]
+      .map {
+        case GetNodeStateOk(active) =>
+          active
+        case GetNodeStateError(message) =>
+          throw new Exception(message)
+      }
+      .flatMap { case active =>
+        if (active) {
+          governor.ask(GetNodeSuccessorId(nodeId))
+            .mapTo[GetNodeSuccessorIdResponse]
+            .map {
+              case GetNodeSuccessorIdOk(successorId) =>
+                NodeAttributes(nodeId, Some(successorId), active = true)
+              case GetNodeSuccessorIdError(message) =>
+                throw new Exception(message)
+            }
+        } else {
+          Future {
+            NodeAttributes(nodeId, None, active = false)
           }
-      } else {
-        Future {
-          NodeAttributes(nodeId, None, active = false)
         }
       }
-    }
 
   private def getNodes(governor: ActorRef): Future[Iterable[NodeAttributes]] = governor.ask(GetNodeIdSet())
     .mapTo[GetNodeIdSetResponse]
@@ -82,54 +87,47 @@ trait WebService extends HttpService {
       } ~ post {
         parameters('seed_id.?) {
           (maybeSeedId) => respondWithMediaType(`application/json`) {
-            complete {
-              ToResponseMarshallable.isMarshallable(
-                maybeSeedId match {
-                  case Some(seedId) =>
-                    governor.ask(CreateNodeWithSeed(seedId.toLong))
-                      .mapTo[CreateNodeWithSeedResponse]
-                      .map {
-                        case CreateNodeWithSeedOk(nodeId, nodeRef) =>
-                          NodeAttributes(nodeId, Some(seedId.toLong), active = true).toJson.compactPrint
-                        case CreateNodeWithSeedInternalError(message) =>
-                          throw new Exception(message)
-                        case CreateNodeWithSeedInvalidRequest(message) =>
-                          respondWithStatus(StatusCodes.BadRequest)
-                          message
-                      }
-                  case None =>
-                    governor.ask(CreateNode())
-                      .mapTo[CreateNodeResponse]
-                      .map {
-                        case CreateNodeOk(nodeId, nodeRef) =>
-                          NodeAttributes(nodeId, Some(nodeId), active = true).toJson.compactPrint
-                        case CreateNodeInternalError(message) =>
-                          throw new Exception(message)
-                        case CreateNodeInvalidRequest(message) =>
-                          respondWithStatus(StatusCodes.BadRequest)
-                          message
-                      }
+            maybeSeedId match {
+              case Some(seedId) =>
+                val future = governor.ask(CreateNodeWithSeed(seedId.toLong)).mapTo[CreateNodeWithSeedResponse]
+                onSuccess(future) {
+                  case CreateNodeWithSeedOk(nodeId, nodeRef) =>
+                    complete(NodeAttributes(nodeId, Some(seedId.toLong), active = true).toJson.compactPrint)
+                  case CreateNodeWithSeedInternalError(_) =>
+                    complete(StatusCodes.InternalServerError -> messageForInternalServerError)
+                  case CreateNodeWithSeedInvalidRequest(message) =>
+                    complete(StatusCodes.BadRequest -> message)
                 }
-              )
+              case None =>
+                val future = governor.ask(CreateNode()).mapTo[CreateNodeResponse]
+                onSuccess(future) {
+                  case CreateNodeOk(nodeId, nodeRef) =>
+                    complete(NodeAttributes(nodeId, Some(nodeId), active = true).toJson.compactPrint)
+                  case CreateNodeInternalError(_) =>
+                    complete(StatusCodes.InternalServerError -> messageForInternalServerError)
+                  case CreateNodeInvalidRequest(message) =>
+                    complete(StatusCodes.BadRequest -> message)
+                }
             }
           }
+
         }
       }
-    } ~ path(IntNumber) {
-      nodeId => get {
-        respondWithMediaType(`application/json`) {
-          complete {
-            ToResponseMarshallable.isMarshallable(getNodeAttributes(governor, nodeId).map {
-              _.toJson.compactPrint
-            })
-          }
-        }
-      } ~ delete {
+    }
+  } ~ path(IntNumber) {
+    nodeId => get {
+      respondWithMediaType(`application/json`) {
         complete {
-          ToResponseMarshallable.isMarshallable(
-            terminateNode(governor, nodeId).map { _ => StatusCodes.OK }
-          )
+          ToResponseMarshallable.isMarshallable(getNodeAttributes(governor, nodeId).map {
+            _.toJson.compactPrint
+          })
         }
+      }
+    } ~ delete {
+      complete {
+        ToResponseMarshallable.isMarshallable(
+          terminateNode(governor, nodeId).map { _ => StatusCodes.OK }
+        )
       }
     }
   }

@@ -5,6 +5,7 @@ import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.demo.Governor._
 import com.tristanpenman.chordial.demo.WebService
 import org.scalatest.{ShouldMatchers, WordSpec}
+import spray.http.StatusCodes
 import spray.json._
 import spray.testkit.ScalatestRouteTest
 
@@ -43,7 +44,8 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
         }
       }
 
-      "respond to a POST request on the /nodes endpoint with the correct JSON object" in {
+      "respond to a POST request on the /nodes endpoint, which does not include a seed ID, with the correct JSON " +
+        "object" in {
         Post("/nodes") ~> routes(governor) ~> check {
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
@@ -53,7 +55,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
         }
       }
 
-      "respond to a POST request on the /nodes endpoint (including a seed ID) with the correct JSON object" in {
+      "respond to a POST request on the /nodes endpoint, which includes a seed ID, with the correct JSON object" in {
         Post("/nodes?seed_id=1") ~> routes(governor) ~> check {
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
@@ -88,6 +90,33 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
           assert(jsonAsNodeAttrArray.contains(NodeAttributes(0L, Some(1L), active = true)))
           assert(jsonAsNodeAttrArray.contains(NodeAttributes(1L, Some(0L), active = true)))
           assert(jsonAsNodeAttrArray.contains(NodeAttributes(2L, None, active = false)))
+        }
+      }
+    }
+
+    "backed by a Governor that always reports an internal error" should {
+      val governor: ActorRef = TestActorRef(new Actor {
+        def receive: Receive = {
+          case CreateNode() =>
+            sender() ! CreateNodeInternalError("Dummy message")
+          case CreateNodeWithSeed(_) =>
+            sender() ! CreateNodeWithSeedInternalError("Dummy message")
+        }
+      })
+
+      "respond to a POST request on the /nodes endpoint, which does not include a seed ID, with a 500 status but " +
+        "not the original error message" in {
+        Post("/nodes") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.InternalServerError)
+          assert(!responseAs[String].contains("Dummy message"))
+        }
+      }
+
+      "respond to a POST request on the /nodes endpoint, which includes a seed ID, with a 500 status but not the " +
+        "original error message" in {
+        Post("/nodes?seed_id=1") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.InternalServerError)
+          assert(!responseAs[String].contains("Dummy message"))
         }
       }
     }
