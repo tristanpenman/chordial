@@ -39,6 +39,8 @@ trait WebService extends HttpService {
           active
         case GetNodeStateError(message) =>
           throw new Exception(message)
+        case GetNodeStateInvalidRequest(message) =>
+          throw new Exception(s"Governor rejected request for node state ($message)")
       }
       .flatMap { case active =>
         if (active) {
@@ -49,6 +51,8 @@ trait WebService extends HttpService {
                 NodeAttributes(nodeId, Some(successorId), active = true)
               case GetNodeSuccessorIdError(message) =>
                 throw new Exception(message)
+              case GetNodeSuccessorIdInvalidRequest(message) =>
+                throw new Exception(s"Governor rejected request for node successor ID ($message)")
             }
         } else {
           Future {
@@ -78,10 +82,12 @@ trait WebService extends HttpService {
     pathEnd {
       get {
         respondWithMediaType(`application/json`) {
-          complete {
-            ToResponseMarshallable.isMarshallable(getNodes(governor).map {
-              _.toJson.compactPrint
-            })
+          val future = getNodes(governor)
+          onComplete(future) {
+            case util.Success(result) =>
+              complete(result.toJson.compactPrint)
+            case util.Failure(exception) =>
+              complete(StatusCodes.InternalServerError -> messageForInternalServerError)
           }
         }
       } ~ post {

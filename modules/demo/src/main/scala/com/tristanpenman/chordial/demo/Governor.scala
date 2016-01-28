@@ -194,9 +194,9 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
         case None =>
           if (terminatedNodes.contains(nodeId)) {
-            sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId is no longer active")
+            sender() ! GetNodeSuccessorIdInvalidRequest(s"Node with ID $nodeId is no longer active")
           } else {
-            sender() ! GetNodeSuccessorIdError(s"Node with ID $nodeId does not exist")
+            sender() ! GetNodeSuccessorIdInvalidRequest(s"Node with ID $nodeId does not exist")
           }
       }
 
@@ -260,6 +260,8 @@ object Governor {
 
   case class GetNodeStateError(message: String) extends GetNodeStateResponse
 
+  case class GetNodeStateInvalidRequest(message: String) extends GetNodeStateResponse
+
   case class GetNodeSuccessorId(nodeId: Long) extends Request
 
   sealed trait GetNodeSuccessorIdResponse extends Response
@@ -267,6 +269,8 @@ object Governor {
   case class GetNodeSuccessorIdOk(successorId: Long) extends GetNodeSuccessorIdResponse
 
   case class GetNodeSuccessorIdError(message: String) extends GetNodeSuccessorIdResponse
+
+  case class GetNodeSuccessorIdInvalidRequest(message: String) extends GetNodeSuccessorIdResponse
 
   case class TerminateNode(nodeId: Long) extends Request
 

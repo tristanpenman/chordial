@@ -94,7 +94,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       }
     }
 
-    "backed by a Governor that always reports an internal error" should {
+    "backed by a Governor that reports an internal error when creating nodes" should {
       val governor: ActorRef = TestActorRef(new Actor {
         def receive: Receive = {
           case CreateNode() =>
@@ -115,6 +115,44 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       "respond to a POST request on the /nodes endpoint, which includes a seed ID, with a 500 status but not the " +
         "original error message" in {
         Post("/nodes?seed_id=1") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.InternalServerError)
+          assert(!responseAs[String].contains("Dummy message"))
+        }
+      }
+    }
+
+    "backed by a Governor that reports an internal error when checking the state of a node" should {
+      val governor: ActorRef = TestActorRef(new Actor {
+        def receive: Receive = {
+          case GetNodeIdSet() =>
+            sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
+          case GetNodeState(_) =>
+            sender() ! GetNodeStateError("Dummy message")
+        }
+      })
+
+      "respond to a GET request on the /nodes endpoint with a 500 status but not the original error message" in {
+        Get("/nodes") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.InternalServerError)
+          assert(!responseAs[String].contains("Dummy message"))
+        }
+      }
+    }
+
+    "backed by a Governor that reports an internal error when retrieving the successor ID of a node" should {
+      val governor: ActorRef = TestActorRef(new Actor {
+        def receive: Receive = {
+          case GetNodeIdSet() =>
+            sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
+          case GetNodeState(_) =>
+            sender() ! GetNodeStateOk(active = true)
+          case GetNodeSuccessorId(_) =>
+            sender() ! GetNodeSuccessorIdError("Dummy message")
+        }
+      })
+
+      "respond to a GET request on the /nodes endpoint with a 500 status but not the original error message" in {
+        Get("/nodes") ~> routes(governor) ~> check {
           assert(response.status == StatusCodes.InternalServerError)
           assert(!responseAs[String].contains("Dummy message"))
         }
