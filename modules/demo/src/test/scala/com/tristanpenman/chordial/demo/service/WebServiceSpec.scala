@@ -92,6 +92,32 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
           assert(jsonAsNodeAttrArray.contains(NodeAttributes(2L, None, active = false)))
         }
       }
+
+      "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is valid and the node is active, " +
+        "with a JSON object" in {
+        Get("/nodes/0") ~> routes(governor) -> check {
+          val jsonAst = responseAs[String].parseJson
+          val jsonAsNodeAttrs = jsonAst.convertTo[NodeAttributes]
+          assert(jsonAsNodeAttrs == NodeAttributes(0L, Some(1L), active = true))
+        }
+      }
+
+      "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is valid but the node is inactive, " +
+        "with a JSON object" in {
+        Get("/nodes/2") ~> routes(governor) -> check {
+          val jsonAst = responseAs[String].parseJson
+          val jsonAsNodeAttrs = jsonAst.convertTo[NodeAttributes]
+          assert(jsonAsNodeAttrs == NodeAttributes(2L, None, active = false))
+        }
+      }
+
+      "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is not valid, with a 400 status" in {
+        List("3", "-1", "-0", "a", ".", "..", "../", "~", "!", "+").foreach(nodeId =>
+          Get("/nodes/" + nodeId) -> routes(governor) -> check {
+            assert(response.status == StatusCodes.BadRequest)
+          }
+        )
+      }
     }
 
     "backed by a Governor that reports an internal error when creating nodes" should {
