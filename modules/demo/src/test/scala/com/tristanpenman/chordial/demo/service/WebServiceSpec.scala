@@ -38,6 +38,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a GET request on the /nodes endpoint with an empty JSON array" in {
         Get("/nodes") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrArray = jsonAst.convertTo[Iterable[NodeAttributes]]
           assert(jsonAsNodeAttrArray.isEmpty)
@@ -47,6 +48,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       "respond to a POST request on the /nodes endpoint, which does not include a seed ID, with the correct JSON " +
         "object" in {
         Post("/nodes") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
           assert(jsonAsNodeAttr.nodeId == 1L)
@@ -57,6 +59,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a POST request on the /nodes endpoint, which includes a seed ID, with the correct JSON object" in {
         Post("/nodes?seed_id=1") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
           assert(jsonAsNodeAttr.nodeId == 2L)
@@ -84,6 +87,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a GET request on the /nodes endpoint with a JSON array of correct JSON objects" in {
         Get("/nodes") ~> routes(governor) ~> check {
+          assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrArray = jsonAst.convertTo[Array[NodeAttributes]]
           assert(jsonAsNodeAttrArray.length == 3)
@@ -96,6 +100,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is valid and the node is active, " +
         "with a JSON object" in {
         Get("/nodes/0") ~> routes(governor) -> check {
+          assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrs = jsonAst.convertTo[NodeAttributes]
           assert(jsonAsNodeAttrs == NodeAttributes(0L, Some(1L), active = true))
@@ -105,6 +110,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is valid but the node is inactive, " +
         "with a JSON object" in {
         Get("/nodes/2") ~> routes(governor) -> check {
+          assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrs = jsonAst.convertTo[NodeAttributes]
           assert(jsonAsNodeAttrs == NodeAttributes(2L, None, active = false))
