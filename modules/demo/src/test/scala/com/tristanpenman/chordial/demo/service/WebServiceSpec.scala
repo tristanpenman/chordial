@@ -15,7 +15,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
   def actorRefFactory: ActorSystem = system
 
-  private def dummyActor: ActorRef = TestActorRef(new Actor {
+  private val dummyActor: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
       case message =>
         fail(s"Dummy actor should not receive any messages, but just received: $message")
