@@ -123,7 +123,7 @@ object CheckPredecessorAlgorithm {
 
   sealed trait CheckPredecessorAlgorithmRequest
 
-  case class CheckPredecessorAlgorithmStart()
+  case class CheckPredecessorAlgorithmStart() extends CheckPredecessorAlgorithmRequest
 
   case class CheckPredecessorAlgorithmReset(newPointersRef: ActorRef, newRequestTimeout: Timeout)
     extends CheckPredecessorAlgorithmRequest
