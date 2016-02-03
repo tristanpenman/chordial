@@ -67,8 +67,8 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
 
   private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
     val algorithm = context.actorOf(
-      ClosestPrecedingNodeAlgorithm.props(queryId, NodeInfo(nodeId, self), nodeRef, externalRequestTimeout))
-    algorithm.ask(ClosestPrecedingNodeAlgorithmStart())(algorithmTimeout)
+      ClosestPrecedingNodeAlgorithm.props(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout))
+    algorithm.ask(ClosestPrecedingNodeAlgorithmStart(queryId))(algorithmTimeout)
       .mapTo[ClosestPrecedingNodeAlgorithmStartResponse]
       .map {
         case ClosestPrecedingNodeAlgorithmFinished(finger) =>
