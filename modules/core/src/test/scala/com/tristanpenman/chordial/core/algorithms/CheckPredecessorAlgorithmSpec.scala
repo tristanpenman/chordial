@@ -32,18 +32,23 @@ class CheckPredecessorAlgorithmSpec
   })
 
   "A CheckPredecessorAlgorithm actor" when {
-
     "initialised with a Pointers actor that does not have a predecessor" should {
       def newPointersActor: ActorRef = TestActorRef(new Actor {
+        def failOnReceive: Receive = {
+          case m =>
+            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
+        }
+
         override def receive: Receive = {
           case GetPredecessor() =>
             sender() ! GetPredecessorOkButUnknown()
+            context.become(failOnReceive)
           case m =>
             fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
         }
       })
 
-      "finish successfully without sending any further messages to the Pointers actor" in {
+      "finish successfully without sending any further messages" in {
         newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart()
         expectMsg(CheckPredecessorAlgorithmFinished())
         expectNoMsg(spuriousMessageDuration)
@@ -69,7 +74,7 @@ class CheckPredecessorAlgorithmSpec
         })
       }
 
-      "finish successfully without sending any further messages to the Pointers actor" in {
+      "finish successfully without sending any further messages" in {
         newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart()
         expectMsg(CheckPredecessorAlgorithmFinished())
         expectNoMsg(spuriousMessageDuration)

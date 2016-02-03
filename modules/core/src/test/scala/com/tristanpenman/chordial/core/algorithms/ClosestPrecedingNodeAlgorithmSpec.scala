@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk}
-import com.tristanpenman.chordial.core.algorithms.ClosestPrecedingNodeAlgorithm.{ClosestPrecedingNodeAlgorithmFinished, ClosestPrecedingNodeAlgorithmError, ClosestPrecedingNodeAlgorithmStart}
+import com.tristanpenman.chordial.core.algorithms.ClosestPrecedingNodeAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
 
@@ -43,9 +43,17 @@ class ClosestPrecedingNodeAlgorithmSpec
   "A ClosestPrecedingNodeAlgorithm actor" when {
     "initialised with a Node ID of 1 and a Pointers actor that only knows about Node ID 1" should {
       def newPointersActor: ActorRef = TestActorRef(new Actor {
+        def failOnReceive: Receive = {
+          case m =>
+            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
+        }
+
         override def receive: Receive = {
           case GetSuccessorList() =>
             sender() ! GetSuccessorListOk(NodeInfo(1L, dummyActorRef), List.empty)
+            context.become(failOnReceive)
+          case m =>
+            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
         }
       })
 
@@ -59,7 +67,7 @@ class ClosestPrecedingNodeAlgorithmSpec
         }
       }
 
-      "not send any additional messages after finishing" in {
+      "finish without sending any further messages" in {
         val algorithm = newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
