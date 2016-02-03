@@ -25,7 +25,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
   "The web service" when {
 
     "backed by a Governor with no nodes" should {
-      val governor: ActorRef = TestActorRef(new Actor {
+      def newGovernor: ActorRef = TestActorRef(new Actor {
         def receive: Receive = {
           case CreateNode() =>
             sender() ! CreateNodeOk(1L, dummyActor)
@@ -37,7 +37,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       })
 
       "respond to a GET request on the /nodes endpoint with an empty JSON array" in {
-        Get("/nodes") ~> routes(governor) ~> check {
+        Get("/nodes") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrArray = jsonAst.convertTo[Iterable[NodeAttributes]]
@@ -47,7 +47,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a POST request on the /nodes endpoint, which does not include a seed ID, with the correct JSON " +
         "object" in {
-        Post("/nodes") ~> routes(governor) ~> check {
+        Post("/nodes") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
@@ -58,7 +58,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       }
 
       "respond to a POST request on the /nodes endpoint, which includes a seed ID, with the correct JSON object" in {
-        Post("/nodes?seed_id=1") ~> routes(governor) ~> check {
+        Post("/nodes?seed_id=1") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttr = jsonAst.convertTo[NodeAttributes]
@@ -70,7 +70,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
     }
 
     "backed by a Governor with existing nodes" should {
-      val governor: ActorRef = TestActorRef(new Actor {
+      def newGovernor: ActorRef = TestActorRef(new Actor {
         def receive: Receive = {
           case GetNodeIdSet() =>
             sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
@@ -86,7 +86,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       })
 
       "respond to a GET request on the /nodes endpoint with a JSON array of correct JSON objects" in {
-        Get("/nodes") ~> routes(governor) ~> check {
+        Get("/nodes") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrArray = jsonAst.convertTo[Array[NodeAttributes]]
@@ -99,7 +99,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is valid and the node is active, " +
         "with a JSON object" in {
-        Get("/nodes/0") ~> routes(governor) -> check {
+        Get("/nodes/0") ~> routes(newGovernor) -> check {
           assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrs = jsonAst.convertTo[NodeAttributes]
@@ -109,7 +109,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is valid but the node is inactive, " +
         "with a JSON object" in {
-        Get("/nodes/2") ~> routes(governor) -> check {
+        Get("/nodes/2") ~> routes(newGovernor) -> check {
           assert(response.status == StatusCodes.OK)
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrs = jsonAst.convertTo[NodeAttributes]
@@ -119,7 +119,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a GET request on the /nodes/{node_id} endpoint, where {node_id} is not valid, with a 400 status" in {
         List("3", "-1", "-0", "a", ".", "..", "../", "~", "!", "+").foreach(nodeId =>
-          Get("/nodes/" + nodeId) -> routes(governor) -> check {
+          Get("/nodes/" + nodeId) -> routes(newGovernor) -> check {
             assert(response.status == StatusCodes.BadRequest)
           }
         )
@@ -127,7 +127,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
     }
 
     "backed by a Governor that reports an internal error when creating nodes" should {
-      val governor: ActorRef = TestActorRef(new Actor {
+      def newGovernor: ActorRef = TestActorRef(new Actor {
         def receive: Receive = {
           case CreateNode() =>
             sender() ! CreateNodeInternalError("Dummy message")
@@ -138,7 +138,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a POST request on the /nodes endpoint, which does not include a seed ID, with a 500 status but " +
         "not the original error message" in {
-        Post("/nodes") ~> routes(governor) ~> check {
+        Post("/nodes") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.InternalServerError)
           assert(!responseAs[String].contains("Dummy message"))
         }
@@ -146,7 +146,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
 
       "respond to a POST request on the /nodes endpoint, which includes a seed ID, with a 500 status but not the " +
         "original error message" in {
-        Post("/nodes?seed_id=1") ~> routes(governor) ~> check {
+        Post("/nodes?seed_id=1") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.InternalServerError)
           assert(!responseAs[String].contains("Dummy message"))
         }
@@ -154,7 +154,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
     }
 
     "backed by a Governor that reports an internal error when checking the state of a node" should {
-      val governor: ActorRef = TestActorRef(new Actor {
+      def newGovernor: ActorRef = TestActorRef(new Actor {
         def receive: Receive = {
           case GetNodeIdSet() =>
             sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
@@ -164,7 +164,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       })
 
       "respond to a GET request on the /nodes endpoint with a 500 status but not the original error message" in {
-        Get("/nodes") ~> routes(governor) ~> check {
+        Get("/nodes") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.InternalServerError)
           assert(!responseAs[String].contains("Dummy message"))
         }
@@ -172,7 +172,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
     }
 
     "backed by a Governor that reports an internal error when retrieving the successor ID of a node" should {
-      val governor: ActorRef = TestActorRef(new Actor {
+      def newGovernor: ActorRef = TestActorRef(new Actor {
         def receive: Receive = {
           case GetNodeIdSet() =>
             sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
@@ -184,7 +184,7 @@ class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with S
       })
 
       "respond to a GET request on the /nodes endpoint with a 500 status but not the original error message" in {
-        Get("/nodes") ~> routes(governor) ~> check {
+        Get("/nodes") ~> routes(newGovernor) ~> check {
           assert(response.status == StatusCodes.InternalServerError)
           assert(!responseAs[String].contains("Dummy message"))
         }
