@@ -17,7 +17,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
 class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalRequestTimeout: Timeout,
-                  livenessCheckDuration: Duration, eventStream: EventStream)
+           livenessCheckDuration: Duration, eventStream: EventStream)
   extends Actor with ActorLogging {
 
   import Node._
@@ -66,11 +66,12 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
   }
 
   private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
-    val algorithm = context.actorOf(ClosestPrecedingNodeAlgorithm.props())
-    algorithm.ask(ClosestPrecedingNodeAlgorithmStart(queryId, NodeInfo(nodeId, self), nodeRef))(algorithmTimeout)
+    val algorithm = context.actorOf(
+      ClosestPrecedingNodeAlgorithm.props(queryId, NodeInfo(nodeId, self), nodeRef, externalRequestTimeout))
+    algorithm.ask(ClosestPrecedingNodeAlgorithmStart())(algorithmTimeout)
       .mapTo[ClosestPrecedingNodeAlgorithmStartResponse]
       .map {
-        case ClosestPrecedingNodeAlgorithmOk(finger) =>
+        case ClosestPrecedingNodeAlgorithmFinished(finger) =>
           ClosestPrecedingNodeOk(finger)
         case ClosestPrecedingNodeAlgorithmAlreadyRunning() =>
           throw new Exception("ClosestPrecedingFingerAlgorithm actor already running")
@@ -78,9 +79,10 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
           ClosestPrecedingNodeError(message)
       }
       .recover {
-        case exception =>
-          context.stop(algorithm)
-          ClosestPrecedingNodeError(exception.getMessage)
+        case exception => ClosestPrecedingNodeError(exception.getMessage)
+      }
+      .andThen {
+        case _ => algorithm ! PoisonPill
       }
       .pipeTo(replyTo)
   }
