@@ -102,14 +102,14 @@ class CheckPredecessorAlgorithm(initialPointersRef: ActorRef, initialRequestTime
 
   private def ready(pointersRef: ActorRef, requestTimeout: Timeout): Receive = {
     case CheckPredecessorAlgorithmStart() =>
-      var replyTo = sender()
+      val replyTo = sender()
+      context.become(running())
       runAsync(pointersRef, requestTimeout).onComplete {
         case util.Success(()) =>
           replyTo ! CheckPredecessorAlgorithmFinished()
         case util.Failure(exception) =>
           replyTo ! CheckPredecessorAlgorithmError(exception.getMessage)
       }
-      context.become(running())
 
     case CheckPredecessorAlgorithmReset(newPointersRef, newRequestTimeout) =>
       context.become(ready(newPointersRef, newRequestTimeout))
