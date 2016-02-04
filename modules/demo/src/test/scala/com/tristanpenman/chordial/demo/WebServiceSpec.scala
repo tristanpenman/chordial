@@ -1,9 +1,8 @@
-package com.tristanpenman.chordial.demo.service
+package com.tristanpenman.chordial.demo
 
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.demo.Governor._
-import com.tristanpenman.chordial.demo.WebService
 import org.scalatest.{ShouldMatchers, WordSpec}
 import spray.http.StatusCodes
 import spray.json._
