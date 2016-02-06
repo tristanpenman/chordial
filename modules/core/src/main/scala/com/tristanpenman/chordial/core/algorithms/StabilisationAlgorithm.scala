@@ -123,21 +123,26 @@ class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: ActorRef
 
     // Step 2:  Reconcile successor list of closest node with that of the current node, removing failed nodes
     .flatMap { case (closestSuccessor, failedNodeIds) =>
-      closestSuccessor.ref.ask(GetSuccessorList())(requestTimeout)
-        .mapTo[GetSuccessorListResponse]
-        .map {
-          case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
-            primarySuccessor :: backupSuccessors.dropRight(1)
-        }
-        .flatMap { backupSuccessors =>
-          val backupSuccessorsWithoutFailedNodes =
-            backupSuccessors.filterNot { nodeInfo => failedNodeIds.contains(nodeInfo.id) }
-          pointersRef.ask(UpdateSuccessorList(closestSuccessor, backupSuccessorsWithoutFailedNodes))(requestTimeout)
-            .mapTo[UpdateSuccessorListResponse]
-            .map {
-              case UpdateSuccessorListOk() => closestSuccessor
-            }
-        }
+      if (closestSuccessor.id == node.id) {
+        // No need to reconcile if the node is its own successor
+        Future { closestSuccessor }
+      } else {
+        closestSuccessor.ref.ask(GetSuccessorList())(requestTimeout)
+          .mapTo[GetSuccessorListResponse]
+          .map {
+            case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
+              primarySuccessor :: backupSuccessors.dropRight(1)
+          }
+          .flatMap { backupSuccessors =>
+            val backupSuccessorsWithoutFailedNodes =
+              backupSuccessors.filterNot { nodeInfo => failedNodeIds.contains(nodeInfo.id) }
+            pointersRef.ask(UpdateSuccessorList(closestSuccessor, backupSuccessorsWithoutFailedNodes))(requestTimeout)
+              .mapTo[UpdateSuccessorListResponse]
+              .map {
+                case UpdateSuccessorListOk() => closestSuccessor
+              }
+          }
+      }
     }
 
     // Step 3:  Notify the new successor that this node presumes to be its predecessor
