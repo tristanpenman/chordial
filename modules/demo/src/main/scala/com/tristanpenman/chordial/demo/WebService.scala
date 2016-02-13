@@ -79,7 +79,7 @@ trait WebService extends HttpService {
     }
 
   protected def routes(governor: ActorRef) = pathPrefix("nodes") {
-    pathEnd {
+    pathEndOrSingleSlash {
       get {
         respondWithMediaType(`application/json`) {
           val future = getNodes(governor)
@@ -119,21 +119,31 @@ trait WebService extends HttpService {
 
         }
       }
-    }
-  } ~ path(IntNumber) {
-    nodeId => get {
-      respondWithMediaType(`application/json`) {
-        complete {
-          ToResponseMarshallable.isMarshallable(getNodeAttributes(governor, nodeId).map {
-            _.toJson.compactPrint
-          })
+    } ~ path(IntNumber) {
+      nodeId => get {
+        respondWithMediaType(`application/json`) {
+          val future = governor.ask(GetNodeIdSet()).mapTo[GetNodeIdSetResponse]
+          onComplete(future) {
+            case util.Success(GetNodeIdSetOk(nodeIdSet)) =>
+              if (nodeIdSet.contains(nodeId)) {
+                complete {
+                  ToResponseMarshallable.isMarshallable(getNodeAttributes(governor, nodeId).map {
+                    _.toJson.compactPrint
+                  })
+                }
+              } else {
+                complete(StatusCodes.BadRequest -> s"Node with ID $nodeId does not exist")
+              }
+            case _ =>
+              complete(StatusCodes.InternalServerError -> messageForInternalServerError)
+          }
         }
-      }
-    } ~ delete {
-      complete {
-        ToResponseMarshallable.isMarshallable(
-          terminateNode(governor, nodeId).map { _ => StatusCodes.OK }
-        )
+      } ~ delete {
+        complete {
+          ToResponseMarshallable.isMarshallable(
+            terminateNode(governor, nodeId).map { _ => StatusCodes.OK }
+          )
+        }
       }
     }
   }
