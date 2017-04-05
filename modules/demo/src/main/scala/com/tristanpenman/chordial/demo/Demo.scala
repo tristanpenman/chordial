@@ -8,6 +8,7 @@ import com.tristanpenman.chordial.core.Event
 import spray.can.Http
 import spray.can.server.UHttp
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.io.StdIn
 
@@ -42,6 +43,7 @@ object Demo extends App {
   private val httpPortNumber = 4567
   IO(UHttp) ? Http.Bind(server, "localhost", httpPortNumber)
   StdIn.readLine("Hit ENTER to exit ...\n")
-  system.shutdown()
-  system.awaitTermination()
+
+  private val whenTerminated = system.terminate()
+  Await.result(whenTerminated, Duration.Inf)
 }

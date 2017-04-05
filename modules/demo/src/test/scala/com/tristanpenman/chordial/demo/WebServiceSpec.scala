@@ -3,12 +3,13 @@ package com.tristanpenman.chordial.demo
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.demo.Governor._
-import org.scalatest.{ShouldMatchers, WordSpec}
+import org.scalatest.WordSpec
+import org.scalatest.Matchers._
 import spray.http.StatusCodes
 import spray.json._
 import spray.testkit.ScalatestRouteTest
 
-class WebServiceSpec extends WordSpec with ShouldMatchers with WebService with ScalatestRouteTest {
+class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
 
   import WebService._
 
