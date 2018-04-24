@@ -8,7 +8,10 @@ import org.scalatest._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordSpecLike with ImplicitSender {
+class GovernorSpec
+    extends TestKit(ActorSystem("GovernorSpec"))
+    with WordSpecLike
+    with ImplicitSender {
 
   // Time to wait before concluding that a node creation confirmation will not be received
   private val creationDuration = 1000.milliseconds

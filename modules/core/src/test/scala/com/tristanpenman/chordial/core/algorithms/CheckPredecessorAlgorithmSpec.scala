@@ -12,7 +12,9 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 class CheckPredecessorAlgorithmSpec
-  extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec")) with WordSpecLike with ImplicitSender {
+    extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec"))
+    with WordSpecLike
+    with ImplicitSender {
 
   // Timeout for requests performed within CheckPredecessorAlgorithm actor
   private val algorithmTimeout = Timeout(300.milliseconds)
@@ -22,7 +24,8 @@ class CheckPredecessorAlgorithmSpec
 
   // Function to create a new CheckPredecessorAlgorithm actor using a given ActorRef as the Pointers actor
   private def newAlgorithmActor(pointersActor: ActorRef): ActorRef =
-    system.actorOf(CheckPredecessorAlgorithm.props(pointersActor, algorithmTimeout))
+    system.actorOf(
+      CheckPredecessorAlgorithm.props(pointersActor, algorithmTimeout))
 
   // Actor that will always discard messages
   private val unresponsiveActor = TestActorRef(new Actor {
@@ -33,20 +36,23 @@ class CheckPredecessorAlgorithmSpec
 
   "A CheckPredecessorAlgorithm actor" when {
     "initialised with a Pointers actor that does not have a predecessor" should {
-      def newPointersActor: ActorRef = TestActorRef(new Actor {
-        def failOnReceive: Receive = {
-          case m =>
-            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
-        }
+      def newPointersActor: ActorRef =
+        TestActorRef(new Actor {
+          def failOnReceive: Receive = {
+            case m =>
+              fail(
+                s"Pointers actor received an unexpected message of type: ${m.getClass})")
+          }
 
-        override def receive: Receive = {
-          case GetPredecessor() =>
-            sender() ! GetPredecessorOkButUnknown()
-            context.become(failOnReceive)
-          case m =>
-            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
-        }
-      })
+          override def receive: Receive = {
+            case GetPredecessor() =>
+              sender() ! GetPredecessorOkButUnknown()
+              context.become(failOnReceive)
+            case m =>
+              fail(
+                s"Pointers actor received an unexpected message of type: ${m.getClass})")
+          }
+        })
 
       "finish successfully without sending any further messages" in {
         newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart()
@@ -69,7 +75,8 @@ class CheckPredecessorAlgorithmSpec
             case GetPredecessor() =>
               sender() ! GetPredecessorOk(NodeInfo(1L, healthyPredecessor))
             case m =>
-              fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
+              fail(
+                s"Pointers actor received an unexpected message of type: ${m.getClass})")
           }
         })
       }
@@ -82,24 +89,27 @@ class CheckPredecessorAlgorithmSpec
     }
 
     "initialised with a Pointers actor whose predecessor is unresponsive" should {
-      def newPointersActor: ActorRef = TestActorRef(new Actor {
-        def receiveWithUnknownPredecessor: Receive = {
-          case GetPredecessor() =>
-            sender() ! GetPredecessorOkButUnknown()
-          case m =>
-            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
-        }
+      def newPointersActor: ActorRef =
+        TestActorRef(new Actor {
+          def receiveWithUnknownPredecessor: Receive = {
+            case GetPredecessor() =>
+              sender() ! GetPredecessorOkButUnknown()
+            case m =>
+              fail(
+                s"Pointers actor received an unexpected message of type: ${m.getClass})")
+          }
 
-        override def receive: Receive = {
-          case GetPredecessor() =>
-            sender() ! GetPredecessorOk(NodeInfo(1L, unresponsiveActor))
-          case ResetPredecessor() =>
-            sender() ! ResetPredecessorOk()
-            context.become(receiveWithUnknownPredecessor)
-          case m =>
-            fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
-        }
-      })
+          override def receive: Receive = {
+            case GetPredecessor() =>
+              sender() ! GetPredecessorOk(NodeInfo(1L, unresponsiveActor))
+            case ResetPredecessor() =>
+              sender() ! ResetPredecessorOk()
+              context.become(receiveWithUnknownPredecessor)
+            case m =>
+              fail(
+                s"Pointers actor received an unexpected message of type: ${m.getClass})")
+          }
+        })
 
       "finish successfully after sending a ResetPredecessor message to the Pointer actor" in {
         val pointersActor = newPointersActor

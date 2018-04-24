@@ -1,22 +1,45 @@
 name := "Chordial"
 
-// Needs to be included in each build.sbt until Scalastyle is updated to correctly resolve settings
-scalastyleConfig := baseDirectory.value / "project" / "scalastyle_config.xml"
+scalaVersion := "2.12.5"
+
+scalacOptions := Seq(
+  "-feature",
+  "-unchecked",
+  "-deprecation",
+  "-opt-warnings:_",
+  "-unchecked",
+  "-Xfuture",
+  "-Xlint:_",
+  "-Ywarn-dead-code",
+  "-Ywarn-extra-implicit",
+  "-Ywarn-inaccessible",
+  "-Ywarn-infer-any",
+  "-Ywarn-nullary-override",
+  "-Ywarn-nullary-unit",
+  "-Ywarn-numeric-widen",
+  "-Ywarn-unused:_",
+  "-Ywarn-value-discard"
+)
+
+scalafmtVersion in ThisBuild := "1.4.0"
 
 lazy val commonSettings = Seq(
   organization := "com.tristanpenman",
   version := "0.0.1",
-  scalaVersion := "2.11.8",
-  scalacOptions := Seq("-feature", "-unchecked", "-deprecation")
+  resolvers ++= Seq(
+    "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+    Resolver.jcenterRepo,
+    Resolver.sonatypeRepo("releases"),
+    Resolver.bintrayRepo("akka", "maven")
+  )
 )
 
-lazy val akkaVersion = "2.4.17"
-lazy val scalatestVersion = "3.0.1"
-lazy val sprayVersion = "1.3.4"
-lazy val sprayJsonVersion = "1.3.3"
-lazy val sprayWebsocketVersion = "0.1.4"
+lazy val akkaVersion = "2.5.12"
+lazy val akkaHttpVersion = "10.1.1"
+lazy val scalatestVersion = "3.0.5"
 
-lazy val core = project.in(file("modules/core"))
+lazy val core = project
+  .in(file("modules/core"))
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-actor" % akkaVersion,
@@ -24,14 +47,16 @@ lazy val core = project.in(file("modules/core"))
     "org.scalatest" %% "scalatest" % scalatestVersion % "test"
   ))
 
-lazy val demo = project.in(file("modules/demo"))
+lazy val demo = project
+  .in(file("modules/demo"))
   .dependsOn(core)
   .settings(commonSettings: _*)
   .settings(libraryDependencies ++= Seq(
+    "ch.megard" %% "akka-http-cors" % "0.3.0",
+    "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
+    "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
     "com.typesafe.akka" %% "akka-remote" % akkaVersion,
-    "com.wandoulabs.akka" %% "spray-websocket" % sprayWebsocketVersion,
-    "io.spray" %% "spray-can" % sprayVersion,
-    "io.spray" %% "spray-json" % sprayJsonVersion,
-    "io.spray" %% "spray-testkit" % sprayVersion % "test",
+    "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+    "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
     "org.scalatest" %% "scalatest" % scalatestVersion % "test"
   ))

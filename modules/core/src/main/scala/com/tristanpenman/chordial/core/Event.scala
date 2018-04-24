@@ -6,7 +6,8 @@ object Event {
 
   case class FingerReset(nodeId: Long, index: Int) extends Event
 
-  case class FingerUpdated(nodeId: Long, index: Int, fingerId: Long) extends Event
+  case class FingerUpdated(nodeId: Long, index: Int, fingerId: Long)
+      extends Event
 
   case class NodeCreated(nodeId: Long, successorId: Long) extends Event
 
@@ -16,6 +17,9 @@ object Event {
 
   case class PredecessorUpdated(nodeId: Long, predecessorId: Long) extends Event
 
-  case class SuccessorListUpdated(nodeId: Long, primarySuccessorId: Long, backupSuccessorIds: List[Long]) extends Event
+  case class SuccessorListUpdated(nodeId: Long,
+                                  primarySuccessorId: Long,
+                                  backupSuccessorIds: List[Long])
+      extends Event
 
 }

@@ -16,9 +16,14 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
-class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalRequestTimeout: Timeout,
-           livenessCheckDuration: Duration, eventStream: EventStream)
-  extends Actor with ActorLogging {
+class Node(nodeId: Long,
+           keyspaceBits: Int,
+           algorithmTimeout: Timeout,
+           externalRequestTimeout: Timeout,
+           livenessCheckDuration: Duration,
+           eventStream: EventStream)
+    extends Actor
+    with ActorLogging {
 
   import Node._
   import Pointers._
@@ -32,49 +37,70 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
 
   // Check that node ID is reasonable
   require(nodeId >= 0, "ownId must be a non-negative Long value")
-  require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
+  require(nodeId < idModulus,
+          s"ownId must be less than $idModulus (2^$keyspaceBits})")
 
   private def newPointers(nodeId: Long, seedId: Long, seedRef: ActorRef) =
-    context.actorOf(Pointers.props(nodeId, fingerTableSize, NodeInfo(seedId, seedRef), eventStream))
+    context.actorOf(
+      Pointers
+        .props(nodeId, fingerTableSize, NodeInfo(seedId, seedRef), eventStream))
 
   private def newCheckPredecessorAlgorithm(nodeRef: ActorRef) =
-    context.actorOf(CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
+    context.actorOf(
+      CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
 
   private def newStabilisationAlgorithm(pointersRef: ActorRef) =
-    context.actorOf(StabilisationAlgorithm.props(NodeInfo(nodeId, self), pointersRef, externalRequestTimeout))
+    context.actorOf(
+      StabilisationAlgorithm
+        .props(NodeInfo(nodeId, self), pointersRef, externalRequestTimeout))
 
-  private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef) = {
-    checkPredecessorAlgorithm.ask(CheckPredecessorAlgorithmStart())(algorithmTimeout)
+  private def checkPredecessor(nodeRef: ActorRef,
+                               checkPredecessorAlgorithm: ActorRef,
+                               replyTo: ActorRef) = {
+    checkPredecessorAlgorithm
+      .ask(CheckPredecessorAlgorithmStart())(algorithmTimeout)
       .mapTo[CheckPredecessorAlgorithmStartResponse]
       .map {
         case CheckPredecessorAlgorithmAlreadyRunning() =>
           CheckPredecessorInProgress()
         case CheckPredecessorAlgorithmFinished() =>
-          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
+          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(
+            nodeRef,
+            externalRequestTimeout)
           CheckPredecessorOk()
         case CheckPredecessorAlgorithmError(message) =>
-          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
+          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(
+            nodeRef,
+            externalRequestTimeout)
           CheckPredecessorError(message)
       }
       .recover {
         case exception =>
           log.error(exception.getMessage)
-          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
-          CheckPredecessorError("CheckPredecessor request failed due to internal error")
+          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(
+            nodeRef,
+            externalRequestTimeout)
+          CheckPredecessorError(
+            "CheckPredecessor request failed due to internal error")
       }
       .pipeTo(replyTo)
   }
 
-  private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
+  private def closestPrecedingFinger(nodeRef: ActorRef,
+                                     queryId: Long,
+                                     replyTo: ActorRef) = {
     val algorithm = context.actorOf(
-      ClosestPrecedingNodeAlgorithm.props(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout))
-    algorithm.ask(ClosestPrecedingNodeAlgorithmStart(queryId))(algorithmTimeout)
+      ClosestPrecedingNodeAlgorithm
+        .props(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout))
+    algorithm
+      .ask(ClosestPrecedingNodeAlgorithmStart(queryId))(algorithmTimeout)
       .mapTo[ClosestPrecedingNodeAlgorithmStartResponse]
       .map {
         case ClosestPrecedingNodeAlgorithmFinished(finger) =>
           ClosestPrecedingNodeOk(finger)
         case ClosestPrecedingNodeAlgorithmAlreadyRunning() =>
-          throw new Exception("ClosestPrecedingFingerAlgorithm actor already running")
+          throw new Exception(
+            "ClosestPrecedingFingerAlgorithm actor already running")
         case ClosestPrecedingNodeAlgorithmError(message) =>
           ClosestPrecedingNodeError(message)
       }
@@ -88,18 +114,21 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
   }
 
   /**
-   * Create an actor to execute the FindPredecessor algorithm and, when it finishes/fails, produce a response that
-   * will be recognised by the original sender of the request
-   *
-   * This method passes in the ID and ActorRef of the current node as the initial candidate node, which means the
-   * FindPredecessor algorithm will begin its search at the current node.
-   */
+    * Create an actor to execute the FindPredecessor algorithm and, when it finishes/fails, produce a response that
+    * will be recognised by the original sender of the request
+    *
+    * This method passes in the ID and ActorRef of the current node as the initial candidate node, which means the
+    * FindPredecessor algorithm will begin its search at the current node.
+    */
   private def findPredecessor(queryId: Long, sender: ActorRef): Unit = {
     // The FindPredecessorAlgorithm actor will shutdown immediately after it sends a FindPredecessorAlgorithmOk or
     // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
-    val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props())
-    findPredecessorAlgorithm.ask(FindPredecessorAlgorithmStart(queryId, NodeInfo(nodeId, self)))(algorithmTimeout)
+    val findPredecessorAlgorithm =
+      context.actorOf(FindPredecessorAlgorithm.props())
+    findPredecessorAlgorithm
+      .ask(FindPredecessorAlgorithmStart(queryId, NodeInfo(nodeId, self)))(
+        algorithmTimeout)
       .mapTo[FindPredecessorAlgorithmStartResponse]
       .map {
         case FindPredecessorAlgorithmOk(predecessor) =>
@@ -118,18 +147,19 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
   }
 
   /**
-   * Create an actor to execute the FindSuccessor algorithm and, when it finishes/fails, produce a response that
-   * will be recognised by the original sender of the request.
-   *
-   * This method passes in the ActorRef of the current node as the search node, which means the operation will be
-   * performed in the context of the current node.
-   */
+    * Create an actor to execute the FindSuccessor algorithm and, when it finishes/fails, produce a response that
+    * will be recognised by the original sender of the request.
+    *
+    * This method passes in the ActorRef of the current node as the search node, which means the operation will be
+    * performed in the context of the current node.
+    */
   private def findSuccessor(queryId: Long, sender: ActorRef): Unit = {
     // The FindSuccessorAlgorithm actor will shutdown immediately after it sends a FindSuccessorAlgorithmOk or
     // FindSuccessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
     val findSuccessorAlgorithm = context.actorOf(FindSuccessorAlgorithm.props())
-    findSuccessorAlgorithm.ask(FindSuccessorAlgorithmStart(queryId, self))(algorithmTimeout)
+    findSuccessorAlgorithm
+      .ask(FindSuccessorAlgorithmStart(queryId, self))(algorithmTimeout)
       .mapTo[FindSuccessorAlgorithmStartResponse]
       .map {
         case FindSuccessorAlgorithmOk(successor) =>
@@ -151,9 +181,13 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
     sender ! FixFingersError("FixFingers request handler not implemented")
   }
 
-  private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef) = {
+  private def notify(nodeRef: ActorRef,
+                     candidate: NodeInfo,
+                     replyTo: ActorRef) = {
     val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
-    notifyAlgorithm.ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(algorithmTimeout)
+    notifyAlgorithm
+      .ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(
+        algorithmTimeout)
       .mapTo[NotifyAlgorithmStartResponse]
       .map {
         case NotifyAlgorithmOk(predecessorUpdated: Boolean) =>
@@ -175,23 +209,35 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
       .pipeTo(replyTo)
   }
 
-  private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef) = {
-    stabilisationAlgorithm.ask(StabilisationAlgorithmStart())(algorithmTimeout)
+  private def stabilise(nodeRef: ActorRef,
+                        stabilisationAlgorithm: ActorRef,
+                        replyTo: ActorRef) = {
+    stabilisationAlgorithm
+      .ask(StabilisationAlgorithmStart())(algorithmTimeout)
       .mapTo[StabilisationAlgorithmStartResponse]
       .map {
         case StabilisationAlgorithmAlreadyRunning() =>
           StabiliseInProgress()
         case StabilisationAlgorithmFinished() =>
-          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
+          stabilisationAlgorithm ! StabilisationAlgorithmReset(
+            NodeInfo(nodeId, self),
+            nodeRef,
+            externalRequestTimeout)
           StabiliseOk()
         case StabilisationAlgorithmError(message) =>
-          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
+          stabilisationAlgorithm ! StabilisationAlgorithmReset(
+            NodeInfo(nodeId, self),
+            nodeRef,
+            externalRequestTimeout)
           StabiliseError(message)
       }
       .recover {
         case exception =>
           log.error(exception.getMessage)
-          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
+          stabilisationAlgorithm ! StabilisationAlgorithmReset(
+            NodeInfo(nodeId, self),
+            nodeRef,
+            externalRequestTimeout)
           StabiliseError("Stabilise request failed due to internal error")
       }
       .pipeTo(replyTo)
@@ -203,16 +249,16 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
     case CheckPredecessor() =>
       checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender())
 
-    case m@ClosestPrecedingNode(queryId: Long) =>
+    case m @ ClosestPrecedingNode(queryId: Long) =>
       closestPrecedingFinger(nodeRef, queryId, sender())
 
-    case m@GetId() =>
+    case m @ GetId() =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
-    case m@GetPredecessor() =>
+    case m @ GetPredecessor() =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
-    case m@GetSuccessorList() =>
+    case m @ GetSuccessorList() =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
     case FindPredecessor(queryId) =>
@@ -229,8 +275,10 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
       context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
       val newPointersRef = newPointers(nodeId, seedId, seedRef)
-      context.become(receiveWhileReady(newPointersRef, newCheckPredecessorAlgorithm(newPointersRef),
-        newStabilisationAlgorithm(newPointersRef)))
+      context.become(
+        receiveWhileReady(newPointersRef,
+                          newCheckPredecessorAlgorithm(newPointersRef),
+                          newStabilisationAlgorithm(newPointersRef)))
       sender() ! JoinOk()
 
     case Notify(candidateId, candidateRef) =>
@@ -242,8 +290,9 @@ class Node(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, externalR
 
   override def receive: Receive = {
     val newPointersRef = newPointers(nodeId, nodeId, self)
-    receiveWhileReady(newPointersRef, newCheckPredecessorAlgorithm(newPointersRef),
-      newStabilisationAlgorithm(newPointersRef))
+    receiveWhileReady(newPointersRef,
+                      newCheckPredecessorAlgorithm(newPointersRef),
+                      newStabilisationAlgorithm(newPointersRef))
   }
 }
 
@@ -261,31 +310,38 @@ object Node {
 
   case class CheckPredecessorOk() extends CheckPredecessorResponse
 
-  case class CheckPredecessorError(message: String) extends CheckPredecessorResponse
+  case class CheckPredecessorError(message: String)
+      extends CheckPredecessorResponse
 
   case class ClosestPrecedingNode(queryId: Long) extends Request
 
   sealed trait ClosestPrecedingNodeResponse extends Response
 
-  case class ClosestPrecedingNodeOk(node: NodeInfo) extends ClosestPrecedingNodeResponse
+  case class ClosestPrecedingNodeOk(node: NodeInfo)
+      extends ClosestPrecedingNodeResponse
 
-  case class ClosestPrecedingNodeError(message: String) extends ClosestPrecedingNodeResponse
+  case class ClosestPrecedingNodeError(message: String)
+      extends ClosestPrecedingNodeResponse
 
   case class FindPredecessor(queryId: Long) extends Request
 
   sealed trait FindPredecessorResponse extends Response
 
-  case class FindPredecessorOk(queryId: Long, predecessor: NodeInfo) extends FindPredecessorResponse
+  case class FindPredecessorOk(queryId: Long, predecessor: NodeInfo)
+      extends FindPredecessorResponse
 
-  case class FindPredecessorError(queryId: Long, message: String) extends FindPredecessorResponse
+  case class FindPredecessorError(queryId: Long, message: String)
+      extends FindPredecessorResponse
 
   case class FindSuccessor(queryId: Long) extends Request
 
   sealed trait FindSuccessorResponse extends Response
 
-  case class FindSuccessorOk(queryId: Long, successor: NodeInfo) extends FindSuccessorResponse
+  case class FindSuccessorOk(queryId: Long, successor: NodeInfo)
+      extends FindSuccessorResponse
 
-  case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
+  case class FindSuccessorError(queryId: Long, message: String)
+      extends FindSuccessorResponse
 
   case class FixFingers() extends Request
 
@@ -325,7 +381,17 @@ object Node {
 
   case class StabiliseError(message: String) extends StabiliseResponse
 
-  def props(nodeId: Long, keyspaceBits: Int, algorithmTimeout: Timeout, requestTimeout: Timeout,
-            livenessCheckDuration: Duration, eventStream: EventStream): Props =
-    Props(new Node(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, livenessCheckDuration, eventStream))
+  def props(nodeId: Long,
+            keyspaceBits: Int,
+            algorithmTimeout: Timeout,
+            requestTimeout: Timeout,
+            livenessCheckDuration: Duration,
+            eventStream: EventStream): Props =
+    Props(
+      new Node(nodeId,
+               keyspaceBits,
+               algorithmTimeout,
+               requestTimeout,
+               livenessCheckDuration,
+               eventStream))
 }

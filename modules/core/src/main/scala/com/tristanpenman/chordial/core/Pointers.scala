@@ -5,8 +5,12 @@ import akka.event.EventStream
 import com.tristanpenman.chordial.core.Event._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
-class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStream: EventStream)
-  extends Actor with ActorLogging {
+class Pointers(nodeId: Long,
+               fingerTableSize: Int,
+               seedNode: NodeInfo,
+               eventStream: EventStream)
+    extends Actor
+    with ActorLogging {
 
   import Pointers._
 
@@ -14,8 +18,11 @@ class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStre
     None
   }
 
-  private def receiveWhileReady(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo],
-                                predecessor: Option[NodeInfo], fingerTable: Vector[Option[NodeInfo]]): Receive = {
+  private def receiveWhileReady(
+      primarySuccessor: NodeInfo,
+      backupSuccessors: List[NodeInfo],
+      predecessor: Option[NodeInfo],
+      fingerTable: Vector[Option[NodeInfo]]): Receive = {
     case GetId() =>
       sender() ! GetIdOk(nodeId)
 
@@ -34,14 +41,21 @@ class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStre
       if (index < 0 || index >= fingerTableSize) {
         sender() ! ResetFingerInvalidIndex()
       } else {
-        context.become(receiveWhileReady(primarySuccessor, backupSuccessors, predecessor,
-          fingerTable.updated(index, None)))
+        context.become(
+          receiveWhileReady(primarySuccessor,
+                            backupSuccessors,
+                            predecessor,
+                            fingerTable.updated(index, None)))
         sender() ! ResetFingerOk()
         eventStream.publish(FingerReset(nodeId, index))
       }
 
     case ResetPredecessor() =>
-      context.become(receiveWhileReady(primarySuccessor, backupSuccessors, None, fingerTable))
+      context.become(
+        receiveWhileReady(primarySuccessor,
+                          backupSuccessors,
+                          None,
+                          fingerTable))
       sender() ! ResetPredecessorOk()
       eventStream.publish(PredecessorReset(nodeId))
 
@@ -49,22 +63,36 @@ class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStre
       if (index < 0 || index >= fingerTableSize) {
         sender() ! UpdateFingerInvalidIndex()
       } else {
-        context.become(receiveWhileReady(primarySuccessor, backupSuccessors, predecessor,
-          fingerTable.updated(index, Some(finger))))
+        context.become(
+          receiveWhileReady(primarySuccessor,
+                            backupSuccessors,
+                            predecessor,
+                            fingerTable.updated(index, Some(finger))))
         sender() ! UpdateFingerOk()
         eventStream.publish(FingerUpdated(nodeId, index, finger.id))
       }
 
     case UpdatePredecessor(newPredecessor) =>
-      context.become(receiveWhileReady(primarySuccessor, backupSuccessors, Some(newPredecessor), fingerTable))
+      context.become(
+        receiveWhileReady(primarySuccessor,
+                          backupSuccessors,
+                          Some(newPredecessor),
+                          fingerTable))
       sender() ! UpdatePredecessorOk()
       eventStream.publish(PredecessorUpdated(nodeId, newPredecessor.id))
 
     case UpdateSuccessorList(newPrimarySuccessor, newBackupSuccessors) =>
       if (newPrimarySuccessor != primarySuccessor || newBackupSuccessors != backupSuccessors) {
-        context.become(receiveWhileReady(newPrimarySuccessor, newBackupSuccessors, predecessor, fingerTable))
+        context.become(
+          receiveWhileReady(newPrimarySuccessor,
+                            newBackupSuccessors,
+                            predecessor,
+                            fingerTable))
         sender() ! UpdateSuccessorListOk()
-        eventStream.publish(SuccessorListUpdated(nodeId, newPrimarySuccessor.id, newBackupSuccessors.map(_.id)))
+        eventStream.publish(
+          SuccessorListUpdated(nodeId,
+                               newPrimarySuccessor.id,
+                               newBackupSuccessors.map(_.id)))
       } else {
         sender() ! UpdateSuccessorListOk()
       }
@@ -72,7 +100,8 @@ class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStre
 
   eventStream.publish(NodeCreated(nodeId, seedNode.id))
 
-  override def receive: Receive = receiveWhileReady(seedNode, List.empty, None, newFingerTable)
+  override def receive: Receive =
+    receiveWhileReady(seedNode, List.empty, None, newFingerTable)
 }
 
 object Pointers {
@@ -91,7 +120,8 @@ object Pointers {
 
   sealed trait GetPredecessorResponse extends Response
 
-  case class GetPredecessorOk(predecessor: NodeInfo) extends GetPredecessorResponse
+  case class GetPredecessorOk(predecessor: NodeInfo)
+      extends GetPredecessorResponse
 
   case class GetPredecessorOkButUnknown() extends GetPredecessorResponse
 
@@ -99,8 +129,9 @@ object Pointers {
 
   case class GetSuccessorList() extends Request
 
-  case class GetSuccessorListOk(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo])
-    extends GetSuccessorListResponse
+  case class GetSuccessorListOk(primarySuccessor: NodeInfo,
+                                backupSuccessors: List[NodeInfo])
+      extends GetSuccessorListResponse
 
   case class ResetPredecessor() extends Request
 
@@ -130,12 +161,17 @@ object Pointers {
 
   case class UpdatePredecessorOk() extends UpdatePredecessorResponse
 
-  case class UpdateSuccessorList(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo]) extends Request
+  case class UpdateSuccessorList(primarySuccessor: NodeInfo,
+                                 backupSuccessors: List[NodeInfo])
+      extends Request
 
   sealed trait UpdateSuccessorListResponse extends Response
 
   case class UpdateSuccessorListOk() extends UpdateSuccessorListResponse
 
-  def props(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream): Props =
+  def props(ownId: Long,
+            keyspaceBits: Int,
+            seed: NodeInfo,
+            eventStream: EventStream): Props =
     Props(new Pointers(ownId, keyspaceBits, seed, eventStream))
 }

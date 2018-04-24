@@ -1,20 +1,32 @@
 package com.tristanpenman.chordial.demo
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.StatusCodes._
+import akka.http.scaladsl.model.ws.TextMessage
+import akka.http.scaladsl.server.Directives
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 import akka.io.IO
 import akka.pattern.ask
+import akka.stream.{
+  ActorAttributes,
+  ActorMaterializer,
+  OverflowStrategy,
+  Supervision
+}
+import akka.stream.scaladsl._
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Event
-import spray.can.Http
-import spray.can.server.UHttp
-
+import com.tristanpenman.chordial.core.Event._
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.io.StdIn
 
 object Demo extends App {
-
   implicit val system = ActorSystem("chordial-demo")
+  implicit val mat = ActorMaterializer()
+
+  import system.dispatcher
 
   implicit val timeout: Timeout = 3.seconds
 
@@ -24,11 +36,8 @@ object Demo extends App {
 
   // Create an actor that is responsible for creating and terminating nodes, while ensuring
   // that nodes are assigned unique IDs in the Chord key-space
-  private val governor = system.actorOf(Governor.props(keyspaceBits), "Governor")
-
-  // Create a web server that will provide both a simple RESTful API for creating and
-  // terminating nodes, and a WebSocket interface through which events will be published
-  private val server = system.actorOf(WebSocketServer.props(governor), "WebSocketServer")
+  private val governor =
+    system.actorOf(Governor.props(keyspaceBits), "Governor")
 
   // Create an actor that will log events published by nodes
   private val eventWriter = system.actorOf(EventWriter.props, "EventWriter")
@@ -36,14 +45,34 @@ object Demo extends App {
   // Subscribe the EventWriter actor to events published by nodes
   system.eventStream.subscribe(eventWriter, classOf[Event])
 
-  // Subscribe the WebSocketServer actor to events published by nodes
-  system.eventStream.subscribe(server, classOf[Event])
+  val (listener, eventsSource) =
+    Source
+      .actorRef[Event](Int.MaxValue, OverflowStrategy.fail)
+      .map {
+        case FingerReset(nodeId: Long, index: Int) =>
+          s"""{ "type": "FingerReset", "nodeId": $nodeId, "index": $index }"""
+        case FingerUpdated(nodeId: Long, index: Int, fingerId: Long) =>
+          s"""{ "type": "FingerUpdated", "nodeId": $nodeId, "index": $index, "fingerId": $fingerId }"""
+        case NodeCreated(nodeId, successorId) =>
+          s"""{ "type": "NodeCreated", "nodeId": $nodeId, "successorId": $successorId }"""
+        case NodeShuttingDown(nodeId) =>
+          s"""{ "type": "NodeDeleted", "nodeId": $nodeId }"""
+        case PredecessorReset(nodeId) =>
+          s"""{ "type": "PredecessorReset", "nodeId": $nodeId }"""
+        case PredecessorUpdated(nodeId, predecessorId) =>
+          s"""{ "type": "PredecessorUpdated", "nodeId": $nodeId, "predecessorId": $predecessorId }"""
+        case SuccessorListUpdated(nodeId, primarySuccessorId, _) =>
+          s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $primarySuccessorId }"""
+      }
+      .map(TextMessage(_))
+      .withAttributes(
+        ActorAttributes.supervisionStrategy(Supervision.resumingDecider))
+      .toMat(BroadcastHub.sink[TextMessage](bufferSize = 16))(Keep.both)
+      .run()
 
-  // Start the web server
-  private val httpPortNumber = 4567
-  IO(UHttp) ? Http.Bind(server, "localhost", httpPortNumber)
-  StdIn.readLine("Hit ENTER to exit ...\n")
+  system.eventStream.subscribe(listener, classOf[Event])
 
-  private val whenTerminated = system.terminate()
-  Await.result(whenTerminated, Duration.Inf)
+  Http().bindAndHandle(WebSocketWorker(governor, eventsSource), "0.0.0.0", 4567)
+
+  Await.result(system.whenTerminated, Duration.Inf)
 }
