@@ -1,11 +1,7 @@
 package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import com.tristanpenman.chordial.core.Node.{
-  FindPredecessor,
-  FindPredecessorError,
-  FindPredecessorOk
-}
+import com.tristanpenman.chordial.core.Node.{FindPredecessor, FindPredecessorError, FindPredecessorOk}
 import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
@@ -23,7 +19,7 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
   * Although the algorithm is defined a way that allows 'find_predecessor' to be performed as an ordinary method call,
   * this class performs the operation by sending a message to an ActorRef and awaiting a response.
   */
-class FindSuccessorAlgorithm extends Actor with ActorLogging {
+final class FindSuccessorAlgorithm extends Actor with ActorLogging {
 
   import FindSuccessorAlgorithm._
 
@@ -33,17 +29,15 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
       context.stop(self)
 
     case FindSuccessorAlgorithmStart(_, _) =>
-      sender() ! FindSuccessorAlgorithmAlreadyRunning()
+      sender() ! FindSuccessorAlgorithmAlreadyRunning
 
     case message =>
-      log.warning(
-        "Received unexpected message while waiting for GetSuccessorResponse: {}",
-        message)
+      log.warning("Received unexpected message while waiting for GetSuccessorResponse: {}", message)
   }
 
   def awaitFindPredecessor(delegate: ActorRef): Receive = {
     case FindPredecessorOk(queryId, predecessor) =>
-      predecessor.ref ! GetSuccessorList()
+      predecessor.ref ! GetSuccessorList
       context.become(awaitGetSuccessorList(delegate))
 
     case FindPredecessorError(queryId, message) =>
@@ -51,12 +45,10 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
       context.stop(self)
 
     case FindSuccessorAlgorithmStart(_, _) =>
-      sender() ! FindSuccessorAlgorithmAlreadyRunning()
+      sender() ! FindSuccessorAlgorithmAlreadyRunning
 
     case message =>
-      log.warning(
-        "Received unexpected message while waiting for FindPredecessorResponse: {}",
-        message)
+      log.warning("Received unexpected message while waiting for FindPredecessorResponse: {}", message)
   }
 
   override def receive: Receive = {
@@ -65,27 +57,21 @@ class FindSuccessorAlgorithm extends Actor with ActorLogging {
       context.become(awaitFindPredecessor(sender()))
 
     case message =>
-      log.warning(
-        "Received unexpected message while waiting for FindSuccessorAlgorithmStart: {}",
-        message)
+      log.warning("Received unexpected message while waiting for FindSuccessorAlgorithmStart: {}", message)
   }
 }
 
 object FindSuccessorAlgorithm {
 
-  case class FindSuccessorAlgorithmStart(queryId: Long,
-                                         initialNodeRef: ActorRef)
+  final case class FindSuccessorAlgorithmStart(queryId: Long, initialNodeRef: ActorRef)
 
   sealed trait FindSuccessorAlgorithmStartResponse
 
-  case class FindSuccessorAlgorithmAlreadyRunning()
-      extends FindSuccessorAlgorithmStartResponse
+  case object FindSuccessorAlgorithmAlreadyRunning extends FindSuccessorAlgorithmStartResponse
 
-  case class FindSuccessorAlgorithmOk(successor: NodeInfo)
-      extends FindSuccessorAlgorithmStartResponse
+  final case class FindSuccessorAlgorithmOk(successor: NodeInfo) extends FindSuccessorAlgorithmStartResponse
 
-  case class FindSuccessorAlgorithmError(message: String)
-      extends FindSuccessorAlgorithmStartResponse
+  final case class FindSuccessorAlgorithmError(message: String) extends FindSuccessorAlgorithmStartResponse
 
   def props(): Props = Props(new FindSuccessorAlgorithm())
 }

@@ -2,23 +2,11 @@ package com.tristanpenman.chordial.demo
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.model.ws.TextMessage
-import akka.http.scaladsl.server.Directives
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.Route
-import akka.io.IO
-import akka.pattern.ask
-import akka.stream.{
-  ActorAttributes,
-  ActorMaterializer,
-  OverflowStrategy,
-  Supervision
-}
+import akka.stream.{ActorAttributes, ActorMaterializer, OverflowStrategy, Supervision}
 import akka.stream.scaladsl._
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Event
-import com.tristanpenman.chordial.core.Event._
+import com.tristanpenman.chordial.core.Event, Event._
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -65,8 +53,7 @@ object Demo extends App {
           s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $primarySuccessorId }"""
       }
       .map(TextMessage(_))
-      .withAttributes(
-        ActorAttributes.supervisionStrategy(Supervision.resumingDecider))
+      .withAttributes(ActorAttributes.supervisionStrategy(Supervision.resumingDecider))
       .toMat(BroadcastHub.sink[TextMessage](bufferSize = 16))(Keep.both)
       .run()
 

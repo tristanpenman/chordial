@@ -6,21 +6,14 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Event.NodeShuttingDown
-import com.tristanpenman.chordial.core.Pointers.{
-  GetSuccessorList,
-  GetSuccessorListOk,
-  GetSuccessorListResponse
-}
-
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
 import scala.annotation.tailrec
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.{Failure, Random, Success}
 
-class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
-
+final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
+  import context.dispatcher
   import Governor._
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
@@ -45,58 +38,40 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   private def scheduleCheckPredecessor(nodeRef: ActorRef) =
     context.system.scheduler.schedule(300.milliseconds, 300.milliseconds) {
       nodeRef
-        .ask(CheckPredecessor())(checkPredecessorTimeout)
+        .ask(CheckPredecessor)(checkPredecessorTimeout)
         .mapTo[CheckPredecessorResponse]
         .onComplete {
           case util.Success(result) =>
             result match {
-              case CheckPredecessorOk() =>
-                log.debug(
-                  "CheckPredecessor (requested for {}) finished successfully",
-                  nodeRef.path)
-              case CheckPredecessorInProgress() =>
-                log.warning(
-                  "CheckPredecessor (requested for {}) already in progress",
-                  nodeRef.path)
+              case CheckPredecessorOk =>
+                log.debug("CheckPredecessor (requested for {}) finished successfully", nodeRef.path)
+              case CheckPredecessorInProgress =>
+                log.warning("CheckPredecessor (requested for {}) already in progress", nodeRef.path)
               case CheckPredecessorError(message) =>
-                log.error(
-                  "CheckPredecessor (requested for {}) finished with error: {}",
-                  nodeRef.path,
-                  message)
+                log.error("CheckPredecessor (requested for {}) finished with error: {}", nodeRef.path, message)
             }
           case util.Failure(exception) =>
-            log.error(
-              "CheckPredecessor (requested for {}) failed with an exception: {}",
-              nodeRef.path,
-              exception)
+            log.error("CheckPredecessor (requested for {}) failed with an exception: {}", nodeRef.path, exception)
         }
     }
 
   private def scheduleFixFingers(nodeRef: ActorRef) =
     context.system.scheduler.schedule(500.milliseconds, 500.milliseconds) {
       nodeRef
-        .ask(FixFingers())(fixFingersTimeout)
+        .ask(FixFingers)(fixFingersTimeout)
         .mapTo[FixFingersResponse]
         .onComplete {
           case util.Success(result) =>
             result match {
-              case FixFingersOk() =>
-                log.debug("FixFingers (requested for {}) finished successfully",
-                          nodeRef.path)
-              case FixFingersInProgress() =>
-                log.debug("FixFingers (requested for {}) already in progress",
-                          nodeRef.path)
+              case FixFingersOk =>
+                log.debug("FixFingers (requested for {}) finished successfully", nodeRef.path)
+              case FixFingersInProgress =>
+                log.debug("FixFingers (requested for {}) already in progress", nodeRef.path)
               case FixFingersError(message) =>
-                log.debug(
-                  "FixFingers (requested for {}) finished with error: {}",
-                  nodeRef.path,
-                  message)
+                log.debug("FixFingers (requested for {}) finished with error: {}", nodeRef.path, message)
             }
           case util.Failure(exception) =>
-            log.error(
-              "FixFingers (requested for {}) failed with an exception: {}",
-              nodeRef.path,
-              exception)
+            log.error("FixFingers (requested for {}) failed with an exception: {}", nodeRef.path, exception)
         }
 
     }
@@ -104,60 +79,47 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   private def scheduleStabilisation(nodeRef: ActorRef) =
     context.system.scheduler.schedule(200.milliseconds, 200.milliseconds) {
       nodeRef
-        .ask(Stabilise())(stabiliseTimeout)
+        .ask(Stabilise)(stabiliseTimeout)
         .mapTo[StabiliseResponse]
         .onComplete {
           case util.Success(result) =>
             result match {
-              case StabiliseOk() =>
-                log.debug(
-                  "Stabilisation (requested for {}) finished successfully",
-                  nodeRef.path)
-              case StabiliseInProgress() =>
-                log.warning(
-                  "Stabilisation (requested for {}) already in progress",
-                  nodeRef.path)
+              case StabiliseOk =>
+                log.debug("Stabilisation (requested for {}) finished successfully", nodeRef.path)
+              case StabiliseInProgress =>
+                log.warning("Stabilisation (requested for {}) already in progress", nodeRef.path)
               case StabiliseError(message) =>
-                log.error(
-                  "Stabilisation (requested for {}) finished with error: {}",
-                  nodeRef.path,
-                  message)
+                log.error("Stabilisation (requested for {}) finished with error: {}", nodeRef.path, message)
             }
           case util.Failure(exception) =>
-            log.error(
-              "Stabilisation (requested for {}) failed with an exception: {}",
-              nodeRef.path,
-              exception)
+            log.error("Stabilisation (requested for {}) failed with an exception: {}", nodeRef.path, exception)
         }
     }
 
-  private def createNode(nodeId: Long): ActorRef = {
+  private def createNode(nodeId: Long): ActorRef =
     context.system.actorOf(
-      Node.props(nodeId,
-                 keyspaceBits,
-                 algorithmTimeout,
-                 externalRequestTimeout,
-                 livenessCheckDuration,
-                 context.system.eventStream))
-  }
+      Node.props(
+        nodeId,
+        keyspaceBits,
+        algorithmTimeout,
+        externalRequestTimeout,
+        livenessCheckDuration,
+        context.system.eventStream
+      )
+    )
 
   @tailrec
   private def generateUniqueId(nodeIds: Set[Long]): Long = {
     val id = Random.nextInt(idModulus)
-    if (!nodeIds.contains(id)) {
-      id
-    } else {
-      generateUniqueId(nodeIds)
-    }
+    if (nodeIds.contains(id)) generateUniqueId(nodeIds) else id
   }
 
-  private def receiveWithNodes(
-      nodes: Map[Long, ActorRef],
-      terminatedNodes: Set[Long],
-      stabilisationCancellables: Map[Long, Cancellable],
-      checkPredecessorCancellables: Map[Long, Cancellable],
-      fixFingersCancellables: Map[Long, Cancellable]): Receive = {
-    case CreateNode() =>
+  private def receiveWithNodes(nodes: Map[Long, ActorRef],
+                               terminatedNodes: Set[Long],
+                               stabilisationCancellables: Map[Long, Cancellable],
+                               checkPredecessorCancellables: Map[Long, Cancellable],
+                               fixFingersCancellables: Map[Long, Cancellable]): Receive = {
+    case CreateNode =>
       if (nodes.size < idModulus) {
         val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
         val nodeRef = createNode(nodeId)
@@ -171,11 +133,11 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
             stabilisationCancellables + (nodeId -> stabilisationCancellable),
             checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
             fixFingersCancellables + (nodeId -> fixFingersCancellable)
-          ))
+          )
+        )
         sender() ! CreateNodeOk(nodeId, nodeRef)
       } else {
-        sender() ! CreateNodeInvalidRequest(
-          s"Maximum of $idModulus Chord nodes already created")
+        sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already created")
       }
 
     case CreateNodeWithSeed(seedId) =>
@@ -188,7 +150,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
               .ask(Join(seedId, seedRef))(joinRequestTimeout)
               .mapTo[JoinResponse]
               .map {
-                case JoinOk()           => Success(())
+                case JoinOk             => Success(())
                 case JoinError(message) => throw new Exception(message)
               }
               .recover {
@@ -198,8 +160,7 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
             Await.result(joinRequest, Duration.Inf) match {
               case Success(()) =>
                 val stabilisationCancellable = scheduleStabilisation(nodeRef)
-                val checkPredecessorCancellable = scheduleCheckPredecessor(
-                  nodeRef)
+                val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
                 val fixFingersCancellable = scheduleFixFingers(nodeRef)
                 context.become(
                   receiveWithNodes(
@@ -208,23 +169,22 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
                     stabilisationCancellables + (nodeId -> stabilisationCancellable),
                     checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
                     fixFingersCancellables + (nodeId -> fixFingersCancellable)
-                  ))
+                  )
+                )
                 sender() ! CreateNodeWithSeedOk(nodeId, nodeRef)
               case Failure(ex) =>
                 context.stop(nodeRef)
                 sender() ! CreateNodeWithSeedInternalError(ex.getMessage)
             }
           } else {
-            sender() ! CreateNodeWithSeedInvalidRequest(
-              s"Maximum of $idModulus Chord nodes already created")
+            sender() ! CreateNodeWithSeedInvalidRequest(s"Maximum of $idModulus Chord nodes already created")
           }
 
         case None =>
-          sender() ! CreateNodeWithSeedInvalidRequest(
-            s"Node with ID $seedId does not exist")
+          sender() ! CreateNodeWithSeedInvalidRequest(s"Node with ID $seedId does not exist")
       }
 
-    case GetNodeIdSet() =>
+    case GetNodeIdSet =>
       sender() ! GetNodeIdSetOk(nodes.keySet ++ terminatedNodes)
 
     case GetNodeState(nodeId: Long) =>
@@ -239,8 +199,8 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
     case GetNodeSuccessorId(nodeId: Long) =>
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
-          val getSuccessorRequest = nodeRef
-            .ask(GetSuccessorList())(getSuccessorRequestTimeout)
+          nodeRef
+            .ask(GetSuccessorList)(getSuccessorRequestTimeout)
             .mapTo[GetSuccessorListResponse]
             .map {
               case GetSuccessorListOk(primarySuccessor, _) =>
@@ -250,14 +210,11 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
               case ex => GetNodeSuccessorIdError(ex.getMessage)
             }
             .pipeTo(sender())
-
         case None =>
           if (terminatedNodes.contains(nodeId)) {
-            sender() ! GetNodeSuccessorIdInvalidRequest(
-              s"Node with ID $nodeId is no longer active")
+            sender() ! GetNodeSuccessorIdInvalidRequest(s"Node with ID $nodeId is no longer active")
           } else {
-            sender() ! GetNodeSuccessorIdInvalidRequest(
-              s"Node with ID $nodeId does not exist")
+            sender() ! GetNodeSuccessorIdInvalidRequest(s"Node with ID $nodeId does not exist")
           }
       }
 
@@ -269,17 +226,19 @@ class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
           fixFingersCancellables.get(nodeId).foreach(_.cancel())
           context.stop(nodeRef)
           context.become(
-            receiveWithNodes(nodes - nodeId,
-                             terminatedNodes + nodeId,
-                             stabilisationCancellables - nodeId,
-                             checkPredecessorCancellables - nodeId,
-                             fixFingersCancellables - nodeId))
-          sender() ! TerminateNodeResponseOk()
+            receiveWithNodes(
+              nodes - nodeId,
+              terminatedNodes + nodeId,
+              stabilisationCancellables - nodeId,
+              checkPredecessorCancellables - nodeId,
+              fixFingersCancellables - nodeId
+            )
+          )
+          sender() ! TerminateNodeResponseOk
           context.system.eventStream.publish(NodeShuttingDown(nodeId))
 
         case None =>
-          sender() ! TerminateNodeResponseError(
-            s"Node with ID $nodeId does not exist")
+          sender() ! TerminateNodeResponseError(s"Node with ID $nodeId does not exist")
       }
   }
 
@@ -293,69 +252,59 @@ object Governor {
 
   sealed trait Response
 
-  case class CreateNode() extends Request
+  case object CreateNode extends Request
 
   sealed trait CreateNodeResponse extends Response
 
-  case class CreateNodeOk(nodeId: Long, nodeRef: ActorRef)
-      extends CreateNodeResponse
+  final case class CreateNodeOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeResponse
 
-  case class CreateNodeInternalError(message: String) extends CreateNodeResponse
+  final case class CreateNodeInternalError(message: String) extends CreateNodeResponse
 
-  case class CreateNodeInvalidRequest(message: String)
-      extends CreateNodeResponse
+  final case class CreateNodeInvalidRequest(message: String) extends CreateNodeResponse
 
-  case class CreateNodeWithSeed(seedId: Long) extends Request
+  final case class CreateNodeWithSeed(seedId: Long) extends Request
 
   sealed trait CreateNodeWithSeedResponse extends Response
 
-  case class CreateNodeWithSeedOk(nodeId: Long, nodeRef: ActorRef)
-      extends CreateNodeWithSeedResponse
+  final case class CreateNodeWithSeedOk(nodeId: Long, nodeRef: ActorRef) extends CreateNodeWithSeedResponse
 
-  case class CreateNodeWithSeedInternalError(message: String)
-      extends CreateNodeWithSeedResponse
+  final case class CreateNodeWithSeedInternalError(message: String) extends CreateNodeWithSeedResponse
 
-  case class CreateNodeWithSeedInvalidRequest(message: String)
-      extends CreateNodeWithSeedResponse
+  final case class CreateNodeWithSeedInvalidRequest(message: String) extends CreateNodeWithSeedResponse
 
-  case class GetNodeIdSet() extends Request
+  case object GetNodeIdSet extends Request
 
   sealed trait GetNodeIdSetResponse extends Response
 
-  case class GetNodeIdSetOk(nodeIds: Set[Long]) extends GetNodeIdSetResponse
+  final case class GetNodeIdSetOk(nodeIds: Set[Long]) extends GetNodeIdSetResponse
 
-  case class GetNodeState(nodeId: Long) extends Request
+  final case class GetNodeState(nodeId: Long) extends Request
 
   sealed trait GetNodeStateResponse extends Response
 
-  case class GetNodeStateOk(active: Boolean) extends GetNodeStateResponse
+  final case class GetNodeStateOk(active: Boolean) extends GetNodeStateResponse
 
-  case class GetNodeStateError(message: String) extends GetNodeStateResponse
+  final case class GetNodeStateError(message: String) extends GetNodeStateResponse
 
-  case class GetNodeStateInvalidRequest(message: String)
-      extends GetNodeStateResponse
+  final case class GetNodeStateInvalidRequest(message: String) extends GetNodeStateResponse
 
-  case class GetNodeSuccessorId(nodeId: Long) extends Request
+  final case class GetNodeSuccessorId(nodeId: Long) extends Request
 
   sealed trait GetNodeSuccessorIdResponse extends Response
 
-  case class GetNodeSuccessorIdOk(successorId: Long)
-      extends GetNodeSuccessorIdResponse
+  final case class GetNodeSuccessorIdOk(successorId: Long) extends GetNodeSuccessorIdResponse
 
-  case class GetNodeSuccessorIdError(message: String)
-      extends GetNodeSuccessorIdResponse
+  final case class GetNodeSuccessorIdError(message: String) extends GetNodeSuccessorIdResponse
 
-  case class GetNodeSuccessorIdInvalidRequest(message: String)
-      extends GetNodeSuccessorIdResponse
+  final case class GetNodeSuccessorIdInvalidRequest(message: String) extends GetNodeSuccessorIdResponse
 
-  case class TerminateNode(nodeId: Long) extends Request
+  final case class TerminateNode(nodeId: Long) extends Request
 
   sealed trait TerminateNodeResponse extends Response
 
-  case class TerminateNodeResponseOk() extends TerminateNodeResponse
+  case object TerminateNodeResponseOk extends TerminateNodeResponse
 
-  case class TerminateNodeResponseError(message: String)
-      extends TerminateNodeResponse
+  final case class TerminateNodeResponseError(message: String) extends TerminateNodeResponse
 
   def props(keyspaceBits: Int): Props = Props(new Governor(keyspaceBits))
 

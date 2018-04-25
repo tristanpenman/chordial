@@ -3,11 +3,7 @@ package com.tristanpenman.chordial.core.algorithms
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.ask
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Pointers.{
-  GetSuccessorListOk,
-  GetSuccessorListResponse,
-  GetSuccessorList
-}
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 import scala.concurrent.Future
@@ -30,9 +26,9 @@ import scala.concurrent.ExecutionContext.Implicits.global
   * The algorithm implemented here behaves as though the node has a finger table of size 2, with the first entry being
   * the node's successor, and the second entry being the node itself.
   */
-class ClosestPrecedingNodeAlgorithm(initialNode: NodeInfo,
-                                    initialPointersRef: ActorRef,
-                                    initialExtTimeout: Timeout)
+final class ClosestPrecedingNodeAlgorithm(initialNode: NodeInfo,
+                                          initialPointersRef: ActorRef,
+                                          initialExtTimeout: Timeout)
     extends Actor
     with ActorLogging {
 
@@ -46,12 +42,9 @@ class ClosestPrecedingNodeAlgorithm(initialNode: NodeInfo,
     *
     * @return a \c Future that will complete once the closest preceding node has been determined
     */
-  private def runAsync(queryId: Long,
-                       node: NodeInfo,
-                       pointersRef: ActorRef,
-                       extTimeout: Timeout): Future[NodeInfo] = {
+  private def runAsync(queryId: Long, node: NodeInfo, pointersRef: ActorRef, extTimeout: Timeout): Future[NodeInfo] =
     pointersRef
-      .ask(GetSuccessorList())(extTimeout)
+      .ask(GetSuccessorList)(extTimeout)
       .mapTo[GetSuccessorListResponse]
       .map {
         case GetSuccessorListOk(primarySuccessor, _) =>
@@ -61,22 +54,17 @@ class ClosestPrecedingNodeAlgorithm(initialNode: NodeInfo,
             node
           }
       }
-  }
 
   private def running(): Receive = {
     case ClosestPrecedingNodeAlgorithmStart(_) =>
-      sender() ! ClosestPrecedingNodeAlgorithmAlreadyRunning()
+      sender() ! ClosestPrecedingNodeAlgorithmAlreadyRunning
 
-    case ClosestPrecedingNodeAlgorithmReset(newNodeId,
-                                            newPointersRef,
-                                            newExtTimeout) =>
+    case ClosestPrecedingNodeAlgorithmReset(newNodeId, newPointersRef, newExtTimeout) =>
       context.become(ready(newNodeId, newPointersRef, newExtTimeout))
-      sender() ! ClosestPrecedingNodeAlgorithmReady()
+      sender() ! ClosestPrecedingNodeAlgorithmReady
   }
 
-  private def ready(node: NodeInfo,
-                    pointersRef: ActorRef,
-                    requestTimeout: Timeout): Receive = {
+  private def ready(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Receive = {
     case ClosestPrecedingNodeAlgorithmStart(queryId: Long) =>
       val replyTo = sender()
       context.become(running())
@@ -87,11 +75,9 @@ class ClosestPrecedingNodeAlgorithm(initialNode: NodeInfo,
           replyTo ! ClosestPrecedingNodeAlgorithmError(exception.getMessage)
       }
 
-    case ClosestPrecedingNodeAlgorithmReset(newNode,
-                                            newPointersRef,
-                                            newExtTimeout) =>
+    case ClosestPrecedingNodeAlgorithmReset(newNode, newPointersRef, newExtTimeout) =>
       context.become(ready(newNode, newPointersRef, newExtTimeout))
-      sender() ! ClosestPrecedingNodeAlgorithmReady()
+      sender() ! ClosestPrecedingNodeAlgorithmReady
   }
 
   override def receive: Receive =
@@ -102,36 +88,26 @@ object ClosestPrecedingNodeAlgorithm {
 
   sealed trait ClosestPrecedingNodeAlgorithmRequest
 
-  case class ClosestPrecedingNodeAlgorithmStart(queryId: Long)
-      extends ClosestPrecedingNodeAlgorithmRequest
+  final case class ClosestPrecedingNodeAlgorithmStart(queryId: Long) extends ClosestPrecedingNodeAlgorithmRequest
 
-  case class ClosestPrecedingNodeAlgorithmReset(node: NodeInfo,
-                                                pointersRef: ActorRef,
-                                                extTimeout: Timeout)
+  final case class ClosestPrecedingNodeAlgorithmReset(node: NodeInfo, pointersRef: ActorRef, extTimeout: Timeout)
       extends ClosestPrecedingNodeAlgorithmRequest
 
   sealed trait ClosestPrecedingNodeAlgorithmStartResponse
 
-  case class ClosestPrecedingNodeAlgorithmFinished(finger: NodeInfo)
+  final case class ClosestPrecedingNodeAlgorithmFinished(finger: NodeInfo)
       extends ClosestPrecedingNodeAlgorithmStartResponse
 
-  case class ClosestPrecedingNodeAlgorithmAlreadyRunning()
-      extends ClosestPrecedingNodeAlgorithmStartResponse
+  case object ClosestPrecedingNodeAlgorithmAlreadyRunning extends ClosestPrecedingNodeAlgorithmStartResponse
 
-  case class ClosestPrecedingNodeAlgorithmError(message: String)
+  final case class ClosestPrecedingNodeAlgorithmError(message: String)
       extends ClosestPrecedingNodeAlgorithmStartResponse
 
   sealed trait ClosestPrecedingNodeAlgorithmResetResponse
 
-  case class ClosestPrecedingNodeAlgorithmReady()
-      extends ClosestPrecedingNodeAlgorithmResetResponse
+  case object ClosestPrecedingNodeAlgorithmReady extends ClosestPrecedingNodeAlgorithmResetResponse
 
-  def props(initialNode: NodeInfo,
-            initialPointersRef: ActorRef,
-            initialExtTimeout: Timeout): Props =
-    Props(
-      new ClosestPrecedingNodeAlgorithm(initialNode,
-                                        initialPointersRef,
-                                        initialExtTimeout))
+  def props(initialNode: NodeInfo, initialPointersRef: ActorRef, initialExtTimeout: Timeout): Props =
+    Props(new ClosestPrecedingNodeAlgorithm(initialNode, initialPointersRef, initialExtTimeout))
 
 }

@@ -1,36 +1,31 @@
 name := "Chordial"
 
-scalaVersion := "2.12.5"
-
-scalacOptions := Seq(
-  "-feature",
-  "-unchecked",
-  "-deprecation",
-  "-opt-warnings:_",
-  "-unchecked",
-  "-Xfuture",
-  "-Xlint:_",
-  "-Ywarn-dead-code",
-  "-Ywarn-extra-implicit",
-  "-Ywarn-inaccessible",
-  "-Ywarn-infer-any",
-  "-Ywarn-nullary-override",
-  "-Ywarn-nullary-unit",
-  "-Ywarn-numeric-widen",
-  "-Ywarn-unused:_",
-  "-Ywarn-value-discard"
-)
-
-scalafmtVersion in ThisBuild := "1.4.0"
-
 lazy val commonSettings = Seq(
   organization := "com.tristanpenman",
   version := "0.0.1",
+  scalafmtOnCompile in ThisBuild := true,
+  scalafmtVersion in ThisBuild := "1.4.0",
+  scalaVersion := "2.12.5",
   resolvers ++= Seq(
     "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
     Resolver.jcenterRepo,
     Resolver.sonatypeRepo("releases"),
     Resolver.bintrayRepo("akka", "maven")
+  ),
+  scalacOptions := Seq(
+    "-feature",
+    "-unchecked",
+    "-deprecation",
+    "-opt-warnings:_",
+    "-unchecked",
+    "-Xfuture",
+    "-Xlint:_",
+    "-Ywarn-dead-code",
+    "-Ywarn-extra-implicit",
+    "-Ywarn-inaccessible",
+    "-Ywarn-infer-any",
+    "-Ywarn-nullary-override",
+    "-Ywarn-unused:_"
   )
 )
 
@@ -41,22 +36,26 @@ lazy val scalatestVersion = "3.0.5"
 lazy val core = project
   .in(file("modules/core"))
   .settings(commonSettings: _*)
-  .settings(libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-    "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-    "org.scalatest" %% "scalatest" % scalatestVersion % "test"
-  ))
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+      "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
+      "org.scalatest" %% "scalatest" % scalatestVersion % "test"
+    )
+  )
 
 lazy val demo = project
   .in(file("modules/demo"))
   .dependsOn(core)
   .settings(commonSettings: _*)
-  .settings(libraryDependencies ++= Seq(
-    "ch.megard" %% "akka-http-cors" % "0.3.0",
-    "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
-    "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
-    "com.typesafe.akka" %% "akka-remote" % akkaVersion,
-    "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-    "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
-    "org.scalatest" %% "scalatest" % scalatestVersion % "test"
-  ))
+  .settings(
+    libraryDependencies ++= Seq(
+      "ch.megard" %% "akka-http-cors" % "0.3.0",
+      "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-remote" % akkaVersion,
+      "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+      "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
+      "org.scalatest" %% "scalatest" % scalatestVersion % "test"
+    )
+  )

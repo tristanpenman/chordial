@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.pattern.{AskTimeoutException, ask}
+import akka.pattern.{ask, AskTimeoutException}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Pointers._
@@ -50,9 +50,7 @@ import scala.language.postfixOps
   * When the algorithm completes, a \c StabilisationAlgorithmFinished or \c StabilisationAlgorithmError message will be
   * sent to the original sender, depending on the outcome.
   */
-class StabilisationAlgorithm(initialNode: NodeInfo,
-                             initialPointersRef: ActorRef,
-                             initialRequestTimeout: Timeout)
+final class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: ActorRef, initialRequestTimeout: Timeout)
     extends Actor
     with ActorLogging {
 
@@ -65,10 +63,9 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
     * Pointers actor, telling it to remove the failing node from the successor list, replacing it with the first of the
     * backup successors. If there are no backup successors, then an exception will be thrown.
     */
-  private def askSuccessor(
-      pointersRef: ActorRef,
-      msg: Any,
-      requestTimeout: Timeout): Future[(Any, NodeInfo, Set[Long])] = {
+  private def askSuccessor(pointersRef: ActorRef,
+                           msg: Any,
+                           requestTimeout: Timeout): Future[(Any, NodeInfo, Set[Long])] = {
     // Helper function to tell the Pointers actor to discard the primary successor
     def switchToNextSuccessor(backupSuccessors: List[NodeInfo]): Unit = {
       if (backupSuccessors.isEmpty) {
@@ -81,17 +78,16 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
       val newBackupSuccessors = backupSuccessors.tail
       Await.ready(
         pointersRef
-          .ask(UpdateSuccessorList(newSuccessor, newBackupSuccessors))(
-            requestTimeout)
-          .mapTo[UpdateSuccessorListOk],
-        Duration.Inf)
+          .ask(UpdateSuccessorList(newSuccessor, newBackupSuccessors))(requestTimeout)
+          .mapTo[UpdateSuccessorListOk.type],
+        Duration.Inf
+      )
     }
 
     // Helper function to forward a message to the current successor
-    def forwardMessage(
-        primarySuccessor: NodeInfo,
-        backupSuccessors: List[NodeInfo],
-        failedNodeIds: Set[Long]): Future[(Any, NodeInfo, Set[Long])] =
+    def forwardMessage(primarySuccessor: NodeInfo,
+                       backupSuccessors: List[NodeInfo],
+                       failedNodeIds: Set[Long]): Future[(Any, NodeInfo, Set[Long])] =
       primarySuccessor.ref
         .ask(msg)(requestTimeout)
         .map {
@@ -100,13 +96,11 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
         .recoverWith {
           case ex: AskTimeoutException =>
             switchToNextSuccessor(backupSuccessors)
-            forwardMessage(backupSuccessors.head,
-                           backupSuccessors.tail,
-                           failedNodeIds + primarySuccessor.id)
+            forwardMessage(backupSuccessors.head, backupSuccessors.tail, failedNodeIds + primarySuccessor.id)
         }
 
     pointersRef
-      .ask(GetSuccessorList())(requestTimeout)
+      .ask(GetSuccessorList)(requestTimeout)
       .mapTo[GetSuccessorListResponse]
       .flatMap {
         case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
@@ -123,12 +117,9 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
     *
     * @return a \c Future that will complete once the updated successor has been notified of the current node
     */
-  private def runAsync(node: NodeInfo,
-                       pointersRef: ActorRef,
-                       requestTimeout: Timeout): Future[Unit] = {
-
+  private def runAsync(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Future[Unit] =
     // Step 1:  Get the predecessor of the current node's first live successor
-    askSuccessor(pointersRef, GetPredecessor(), requestTimeout)
+    askSuccessor(pointersRef, GetPredecessor, requestTimeout)
       .mapTo[(GetPredecessorResponse, NodeInfo, Set[Long])]
       .map {
         case (GetPredecessorOk(candidate), currentSuccessor, failedNodeIds)
@@ -137,7 +128,7 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
           (candidate, failedNodeIds)
         case (GetPredecessorOk(_), currentSuccessor, failedNodeIds) =>
           (currentSuccessor, failedNodeIds)
-        case (GetPredecessorOkButUnknown(), currentSuccessor, failedNodeIds) =>
+        case (GetPredecessorOkButUnknown, currentSuccessor, failedNodeIds) =>
           (currentSuccessor, failedNodeIds)
       }
 
@@ -149,7 +140,7 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
             Future { closestSuccessor }
           } else {
             closestSuccessor.ref
-              .ask(GetSuccessorList())(requestTimeout)
+              .ask(GetSuccessorList)(requestTimeout)
               .mapTo[GetSuccessorListResponse]
               .map {
                 case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
@@ -161,12 +152,10 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
                     failedNodeIds.contains(nodeInfo.id)
                   }
                 pointersRef
-                  .ask(UpdateSuccessorList(closestSuccessor,
-                                           backupSuccessorsWithoutFailedNodes))(
-                    requestTimeout)
+                  .ask(UpdateSuccessorList(closestSuccessor, backupSuccessorsWithoutFailedNodes))(requestTimeout)
                   .mapTo[UpdateSuccessorListResponse]
                   .map {
-                    case UpdateSuccessorListOk() => closestSuccessor
+                    case UpdateSuccessorListOk => closestSuccessor
                   }
               }
           }
@@ -178,41 +167,34 @@ class StabilisationAlgorithm(initialNode: NodeInfo,
           .ask(Notify(node.id, node.ref))(requestTimeout)
           .mapTo[NotifyResponse]
           .map {
-            case NotifyOk() | NotifyIgnored() =>
-            case NotifyError(message)         => throw new Exception(message)
+            case NotifyOk | NotifyIgnored =>
+            case NotifyError(message)     => throw new Exception(message)
           }
       }
-  }
 
   private def running(): Receive = {
-    case StabilisationAlgorithmStart() =>
-      sender() ! StabilisationAlgorithmAlreadyRunning()
+    case StabilisationAlgorithmStart =>
+      sender() ! StabilisationAlgorithmAlreadyRunning
 
-    case StabilisationAlgorithmReset(newNode,
-                                     newPointersRef,
-                                     newRequestTimeout) =>
+    case StabilisationAlgorithmReset(newNode, newPointersRef, newRequestTimeout) =>
       context.become(ready(newNode, newPointersRef, newRequestTimeout))
-      sender() ! StabilisationAlgorithmReady()
+      sender() ! StabilisationAlgorithmReady
   }
 
-  private def ready(node: NodeInfo,
-                    pointersRef: ActorRef,
-                    requestTimeout: Timeout): Receive = {
-    case StabilisationAlgorithmStart() =>
+  private def ready(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Receive = {
+    case StabilisationAlgorithmStart =>
       val replyTo = sender()
       runAsync(node, pointersRef, requestTimeout).onComplete {
         case util.Success(()) =>
-          replyTo ! StabilisationAlgorithmFinished()
+          replyTo ! StabilisationAlgorithmFinished
         case util.Failure(exception) =>
           replyTo ! StabilisationAlgorithmError(exception.getMessage)
       }
       context.become(running())
 
-    case StabilisationAlgorithmReset(newNode,
-                                     newPointersRef,
-                                     newRequestTimeout) =>
+    case StabilisationAlgorithmReset(newNode, newPointersRef, newRequestTimeout) =>
       context.become(ready(newNode, newPointersRef, newRequestTimeout))
-      sender() ! StabilisationAlgorithmReady()
+      sender() ! StabilisationAlgorithmReady
   }
 
   override def receive: Receive =
@@ -223,34 +205,23 @@ object StabilisationAlgorithm {
 
   sealed trait StabilisationAlgorithmRequest
 
-  case class StabilisationAlgorithmStart() extends StabilisationAlgorithmRequest
+  case object StabilisationAlgorithmStart extends StabilisationAlgorithmRequest
 
-  case class StabilisationAlgorithmReset(newNode: NodeInfo,
-                                         newPointersRef: ActorRef,
-                                         newRequestTimeout: Timeout)
+  final case class StabilisationAlgorithmReset(newNode: NodeInfo, newPointersRef: ActorRef, newRequestTimeout: Timeout)
       extends StabilisationAlgorithmRequest
 
   sealed trait StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmFinished()
-      extends StabilisationAlgorithmStartResponse
+  case object StabilisationAlgorithmFinished extends StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmAlreadyRunning()
-      extends StabilisationAlgorithmStartResponse
+  case object StabilisationAlgorithmAlreadyRunning extends StabilisationAlgorithmStartResponse
 
-  case class StabilisationAlgorithmError(message: String)
-      extends StabilisationAlgorithmStartResponse
+  final case class StabilisationAlgorithmError(message: String) extends StabilisationAlgorithmStartResponse
 
   sealed trait StabilisationAlgorithmResetResponse
 
-  case class StabilisationAlgorithmReady()
-      extends StabilisationAlgorithmResetResponse
+  case object StabilisationAlgorithmReady extends StabilisationAlgorithmResetResponse
 
-  def props(initialNode: NodeInfo,
-            initialPointersRef: ActorRef,
-            initialRequestTimeout: Timeout): Props =
-    Props(
-      new StabilisationAlgorithm(initialNode,
-                                 initialPointersRef,
-                                 initialRequestTimeout))
+  def props(initialNode: NodeInfo, initialPointersRef: ActorRef, initialRequestTimeout: Timeout): Props =
+    Props(new StabilisationAlgorithm(initialNode, initialPointersRef, initialRequestTimeout))
 }

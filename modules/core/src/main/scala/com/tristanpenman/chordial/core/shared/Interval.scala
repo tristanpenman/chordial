@@ -1,6 +1,6 @@
 package com.tristanpenman.chordial.core.shared
 
-class Interval(begin: Long, end: Long) {
+final class Interval(begin: Long, end: Long) {
   def contains(id: Long): Boolean =
     if (begin <= end) {
       id >= begin && id < end // Interval does not wrap around

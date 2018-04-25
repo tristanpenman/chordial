@@ -12,7 +12,7 @@ import org.scalatest.concurrent.ScalaFutures
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class PointersSpec
+final class PointersSpec
     extends TestKit(ActorSystem("PointersSpec"))
     with WordSpecLike
     with ImplicitSender
@@ -23,8 +23,7 @@ class PointersSpec
   private val dummyActorRef: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
       case message =>
-        fail(
-          s"Dummy actor should not receive any messages, but just received: $message")
+        fail(s"Dummy actor should not receive any messages, but just received: $message")
     }
   })
 
@@ -36,11 +35,7 @@ class PointersSpec
 
     "initially constructed" should {
       def newPointersActor: ActorRef =
-        system.actorOf(
-          Pointers.props(ownId,
-                         keyspaceBits,
-                         NodeInfo(seedId, dummyActorRef),
-                         system.eventStream))
+        system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
 
       "respond to a GetId message with a GetIdOk message containing its ID" in {
         newPointersActor ! GetId()
@@ -48,25 +43,21 @@ class PointersSpec
       }
 
       "respond to a GetPredecessor message with a GetPredecessorOkButUnknown message" in {
-        newPointersActor ! GetPredecessor()
-        expectMsg(GetPredecessorOkButUnknown())
+        newPointersActor ! GetPredecessor
+        expectMsg(GetPredecessorOkButUnknown)
       }
 
       "respond to a GetSuccessorList message with a GetSuccessorListOk message containing its successor's ID and " +
         "an empty backup successor list" in {
-        newPointersActor ! GetSuccessorList()
-        expectMsg(
-          GetSuccessorListOk(NodeInfo(seedId, dummyActorRef), List.empty))
+        newPointersActor ! GetSuccessorList
+        expectMsg(GetSuccessorListOk(NodeInfo(seedId, dummyActorRef), List.empty))
       }
     }
 
     "its predecessor has been updated" should {
       def newPointersActor: ActorRef = {
-        val actor = system.actorOf(
-          Pointers.props(ownId,
-                         keyspaceBits,
-                         NodeInfo(seedId, dummyActorRef),
-                         system.eventStream))
+        val actor =
+          system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
 
         // Set predecessor pointer
         val future = actor.ask(UpdatePredecessor(NodeInfo(0L, self)))
@@ -77,7 +68,7 @@ class PointersSpec
       }
 
       "respond to a GetPredecessor message with a GetPredecessorOk message containing its predecessor's ID" in {
-        newPointersActor ! GetPredecessor()
+        newPointersActor ! GetPredecessor
         expectMsg(GetPredecessorOk(NodeInfo(0L, self)))
       }
 
@@ -85,11 +76,11 @@ class PointersSpec
         "GetPredecessor message with a GetPredecessorOkButUnknown message" in {
         val pointersActor = newPointersActor
 
-        pointersActor ! ResetPredecessor()
+        pointersActor ! ResetPredecessor
         expectMsg(ResetPredecessorOk())
 
-        pointersActor ! GetPredecessor()
-        expectMsg(GetPredecessorOkButUnknown())
+        pointersActor ! GetPredecessor
+        expectMsg(GetPredecessorOkButUnknown)
       }
     }
 
@@ -100,24 +91,21 @@ class PointersSpec
       val backupSuccessorList = List(NodeInfo(backupId, dummyActorRef))
 
       def newPointersActor: ActorRef = {
-        val actor = system.actorOf(
-          Pointers.props(ownId,
-                         keyspaceBits,
-                         NodeInfo(seedId, dummyActorRef),
-                         system.eventStream))
+        val actor =
+          system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
 
         // Update successor list
         val future =
           actor.ask(UpdateSuccessorList(primarySuccessor, backupSuccessorList))
 
         // Wait for update to be acknowledged
-        assert(future.futureValue == UpdateSuccessorListOk())
+        assert(future.futureValue == UpdateSuccessorListOk)
         actor
       }
 
       "respond to a GetSuccessorList message with a GetSuccessorListOk message containing information for the " +
         "primary successor and the list of backup successors" in {
-        newPointersActor ! GetSuccessorList()
+        newPointersActor ! GetSuccessorList
         expectMsg(GetSuccessorListOk(primarySuccessor, backupSuccessorList))
       }
 
@@ -128,16 +116,13 @@ class PointersSpec
         val secondBackupId = 5L
         val newPrimarySuccessor = NodeInfo(newSuccessorId, dummyActorRef)
         val newBackupSuccessorList =
-          List(NodeInfo(backupId, dummyActorRef),
-               NodeInfo(secondBackupId, dummyActorRef))
+          List(NodeInfo(backupId, dummyActorRef), NodeInfo(secondBackupId, dummyActorRef))
 
-        pointersActor ! UpdateSuccessorList(newPrimarySuccessor,
-                                            newBackupSuccessorList)
-        expectMsg(UpdateSuccessorListOk())
+        pointersActor ! UpdateSuccessorList(newPrimarySuccessor, newBackupSuccessorList)
+        expectMsg(UpdateSuccessorListOk)
 
-        pointersActor ! GetSuccessorList()
-        expectMsg(
-          GetSuccessorListOk(newPrimarySuccessor, newBackupSuccessorList))
+        pointersActor ! GetSuccessorList
+        expectMsg(GetSuccessorListOk(newPrimarySuccessor, newBackupSuccessorList))
       }
     }
   }

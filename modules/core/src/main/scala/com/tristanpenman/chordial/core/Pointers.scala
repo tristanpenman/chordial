@@ -5,10 +5,7 @@ import akka.event.EventStream
 import com.tristanpenman.chordial.core.Event._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
-class Pointers(nodeId: Long,
-               fingerTableSize: Int,
-               seedNode: NodeInfo,
-               eventStream: EventStream)
+final class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eventStream: EventStream)
     extends Actor
     with ActorLogging {
 
@@ -18,83 +15,63 @@ class Pointers(nodeId: Long,
     None
   }
 
-  private def receiveWhileReady(
-      primarySuccessor: NodeInfo,
-      backupSuccessors: List[NodeInfo],
-      predecessor: Option[NodeInfo],
-      fingerTable: Vector[Option[NodeInfo]]): Receive = {
-    case GetId() =>
+  private def receiveWhileReady(primarySuccessor: NodeInfo,
+                                backupSuccessors: List[NodeInfo],
+                                predecessor: Option[NodeInfo],
+                                fingerTable: Vector[Option[NodeInfo]]): Receive = {
+    case GetId =>
       sender() ! GetIdOk(nodeId)
 
-    case GetPredecessor() =>
+    case GetPredecessor =>
       predecessor match {
         case Some(info) =>
           sender() ! GetPredecessorOk(info)
         case None =>
-          sender() ! GetPredecessorOkButUnknown()
+          sender() ! GetPredecessorOkButUnknown
       }
 
-    case GetSuccessorList() =>
+    case GetSuccessorList =>
       sender() ! GetSuccessorListOk(primarySuccessor, backupSuccessors)
 
     case ResetFinger(index: Int) =>
       if (index < 0 || index >= fingerTableSize) {
-        sender() ! ResetFingerInvalidIndex()
+        sender() ! ResetFingerInvalidIndex
       } else {
         context.become(
-          receiveWhileReady(primarySuccessor,
-                            backupSuccessors,
-                            predecessor,
-                            fingerTable.updated(index, None)))
-        sender() ! ResetFingerOk()
+          receiveWhileReady(primarySuccessor, backupSuccessors, predecessor, fingerTable.updated(index, None))
+        )
+        sender() ! ResetFingerOk
         eventStream.publish(FingerReset(nodeId, index))
       }
 
-    case ResetPredecessor() =>
-      context.become(
-        receiveWhileReady(primarySuccessor,
-                          backupSuccessors,
-                          None,
-                          fingerTable))
-      sender() ! ResetPredecessorOk()
+    case ResetPredecessor =>
+      context.become(receiveWhileReady(primarySuccessor, backupSuccessors, None, fingerTable))
+      sender() ! ResetPredecessorOk
       eventStream.publish(PredecessorReset(nodeId))
 
     case UpdateFinger(index: Int, finger: NodeInfo) =>
       if (index < 0 || index >= fingerTableSize) {
-        sender() ! UpdateFingerInvalidIndex()
+        sender() ! UpdateFingerInvalidIndex
       } else {
         context.become(
-          receiveWhileReady(primarySuccessor,
-                            backupSuccessors,
-                            predecessor,
-                            fingerTable.updated(index, Some(finger))))
-        sender() ! UpdateFingerOk()
+          receiveWhileReady(primarySuccessor, backupSuccessors, predecessor, fingerTable.updated(index, Some(finger)))
+        )
+        sender() ! UpdateFingerOk
         eventStream.publish(FingerUpdated(nodeId, index, finger.id))
       }
 
     case UpdatePredecessor(newPredecessor) =>
-      context.become(
-        receiveWhileReady(primarySuccessor,
-                          backupSuccessors,
-                          Some(newPredecessor),
-                          fingerTable))
-      sender() ! UpdatePredecessorOk()
+      context.become(receiveWhileReady(primarySuccessor, backupSuccessors, Some(newPredecessor), fingerTable))
+      sender() ! UpdatePredecessorOk
       eventStream.publish(PredecessorUpdated(nodeId, newPredecessor.id))
 
     case UpdateSuccessorList(newPrimarySuccessor, newBackupSuccessors) =>
       if (newPrimarySuccessor != primarySuccessor || newBackupSuccessors != backupSuccessors) {
-        context.become(
-          receiveWhileReady(newPrimarySuccessor,
-                            newBackupSuccessors,
-                            predecessor,
-                            fingerTable))
-        sender() ! UpdateSuccessorListOk()
-        eventStream.publish(
-          SuccessorListUpdated(nodeId,
-                               newPrimarySuccessor.id,
-                               newBackupSuccessors.map(_.id)))
+        context.become(receiveWhileReady(newPrimarySuccessor, newBackupSuccessors, predecessor, fingerTable))
+        sender() ! UpdateSuccessorListOk
+        eventStream.publish(SuccessorListUpdated(nodeId, newPrimarySuccessor.id, newBackupSuccessors.map(_.id)))
       } else {
-        sender() ! UpdateSuccessorListOk()
+        sender() ! UpdateSuccessorListOk
       }
   }
 
@@ -110,68 +87,61 @@ object Pointers {
 
   sealed trait Response
 
-  case class GetId() extends Request
+  case object GetId extends Request
 
   sealed trait GetIdResponse extends Response
 
-  case class GetIdOk(id: Long) extends GetIdResponse
+  final case class GetIdOk(id: Long) extends GetIdResponse
 
-  case class GetPredecessor() extends Request
+  case object GetPredecessor extends Request
 
   sealed trait GetPredecessorResponse extends Response
 
-  case class GetPredecessorOk(predecessor: NodeInfo)
-      extends GetPredecessorResponse
+  final case class GetPredecessorOk(predecessor: NodeInfo) extends GetPredecessorResponse
 
-  case class GetPredecessorOkButUnknown() extends GetPredecessorResponse
+  case object GetPredecessorOkButUnknown extends GetPredecessorResponse
 
   sealed trait GetSuccessorListResponse extends Response
 
-  case class GetSuccessorList() extends Request
+  case object GetSuccessorList extends Request
 
-  case class GetSuccessorListOk(primarySuccessor: NodeInfo,
-                                backupSuccessors: List[NodeInfo])
+  final case class GetSuccessorListOk(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo])
       extends GetSuccessorListResponse
 
-  case class ResetPredecessor() extends Request
+  case object ResetPredecessor extends Request
 
   sealed trait ResetPredecessorResponse extends Response
 
-  case class ResetPredecessorOk() extends ResetPredecessorResponse
+  case object ResetPredecessorOk extends ResetPredecessorResponse
 
-  case class ResetFinger(index: Int) extends Request
+  final case class ResetFinger(index: Int) extends Request
 
   sealed trait ResetFingerResponse extends Response
 
-  case class ResetFingerOk() extends ResetFingerResponse
+  case object ResetFingerOk extends ResetFingerResponse
 
-  case class ResetFingerInvalidIndex() extends ResetFingerResponse
+  case object ResetFingerInvalidIndex extends ResetFingerResponse
 
-  case class UpdateFinger(index: Int, finger: NodeInfo) extends Request
+  final case class UpdateFinger(index: Int, finger: NodeInfo) extends Request
 
   sealed trait UpdateFingerResponse extends Response
 
-  case class UpdateFingerOk() extends UpdateFingerResponse
+  case object UpdateFingerOk extends UpdateFingerResponse
 
-  case class UpdateFingerInvalidIndex() extends UpdateFingerResponse
+  case object UpdateFingerInvalidIndex extends UpdateFingerResponse
 
-  case class UpdatePredecessor(predecessor: NodeInfo) extends Request
+  final case class UpdatePredecessor(predecessor: NodeInfo) extends Request
 
   sealed trait UpdatePredecessorResponse extends Response
 
-  case class UpdatePredecessorOk() extends UpdatePredecessorResponse
+  case object UpdatePredecessorOk extends UpdatePredecessorResponse
 
-  case class UpdateSuccessorList(primarySuccessor: NodeInfo,
-                                 backupSuccessors: List[NodeInfo])
-      extends Request
+  final case class UpdateSuccessorList(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo]) extends Request
 
   sealed trait UpdateSuccessorListResponse extends Response
 
-  case class UpdateSuccessorListOk() extends UpdateSuccessorListResponse
+  case object UpdateSuccessorListOk extends UpdateSuccessorListResponse
 
-  def props(ownId: Long,
-            keyspaceBits: Int,
-            seed: NodeInfo,
-            eventStream: EventStream): Props =
+  def props(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream): Props =
     Props(new Pointers(ownId, keyspaceBits, seed, eventStream))
 }

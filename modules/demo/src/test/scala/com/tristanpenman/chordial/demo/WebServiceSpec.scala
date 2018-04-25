@@ -9,7 +9,7 @@ import spray.http.StatusCodes
 import spray.json._
 import spray.testkit.ScalatestRouteTest
 
-class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
+final class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
 
   import WebService._
 
@@ -18,8 +18,7 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
   private val dummyActor: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
       case message =>
-        fail(
-          s"Dummy actor should not receive any messages, but just received: $message")
+        fail(s"Dummy actor should not receive any messages, but just received: $message")
     }
   })
 
@@ -29,11 +28,11 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
       def newGovernor: ActorRef =
         TestActorRef(new Actor {
           def receive: Receive = {
-            case CreateNode() =>
+            case CreateNode =>
               sender() ! CreateNodeOk(1L, dummyActor)
             case CreateNodeWithSeed(seedId) =>
               sender() ! CreateNodeWithSeedOk(2L, dummyActor)
-            case GetNodeIdSet() =>
+            case GetNodeIdSet =>
               sender() ! GetNodeIdSetOk(Set.empty)
           }
         })
@@ -75,14 +74,13 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
       def newGovernor: ActorRef =
         TestActorRef(new Actor {
           def receive: Receive = {
-            case GetNodeIdSet() =>
+            case GetNodeIdSet =>
               sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
             case GetNodeState(nodeId) =>
               sender() ! GetNodeStateOk(nodeId == 0L || nodeId == 1L)
             case GetNodeSuccessorId(nodeId) =>
               if (nodeId == 2L) {
-                fail(
-                  "Web service attempted to query successor ID of an inactive node")
+                fail("Web service attempted to query successor ID of an inactive node")
               } else {
                 sender() ! GetNodeSuccessorIdOk((nodeId + 1L) % 2L)
               }
@@ -95,15 +93,9 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
           val jsonAst = responseAs[String].parseJson
           val jsonAsNodeAttrArray = jsonAst.convertTo[Array[NodeAttributes]]
           assert(jsonAsNodeAttrArray.length == 3)
-          assert(
-            jsonAsNodeAttrArray.contains(
-              NodeAttributes(0L, Some(1L), active = true)))
-          assert(
-            jsonAsNodeAttrArray.contains(
-              NodeAttributes(1L, Some(0L), active = true)))
-          assert(
-            jsonAsNodeAttrArray.contains(
-              NodeAttributes(2L, None, active = false)))
+          assert(jsonAsNodeAttrArray.contains(NodeAttributes(0L, Some(1L), active = true)))
+          assert(jsonAsNodeAttrArray.contains(NodeAttributes(1L, Some(0L), active = true)))
+          assert(jsonAsNodeAttrArray.contains(NodeAttributes(2L, None, active = false)))
         }
       }
 
@@ -132,7 +124,8 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
           nodeId =>
             Get("/nodes/" + nodeId) -> routes(newGovernor) -> check {
               assert(response.status == StatusCodes.BadRequest)
-          })
+          }
+        )
       }
     }
 
@@ -140,7 +133,7 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
       def newGovernor: ActorRef =
         TestActorRef(new Actor {
           def receive: Receive = {
-            case CreateNode() =>
+            case CreateNode =>
               sender() ! CreateNodeInternalError("Dummy message")
             case CreateNodeWithSeed(_) =>
               sender() ! CreateNodeWithSeedInternalError("Dummy message")
@@ -168,7 +161,7 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
       def newGovernor: ActorRef =
         TestActorRef(new Actor {
           def receive: Receive = {
-            case GetNodeIdSet() =>
+            case GetNodeIdSet =>
               sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
             case GetNodeState(_) =>
               sender() ! GetNodeStateError("Dummy message")
@@ -187,7 +180,7 @@ class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
       def newGovernor: ActorRef =
         TestActorRef(new Actor {
           def receive: Receive = {
-            case GetNodeIdSet() =>
+            case GetNodeIdSet =>
               sender() ! GetNodeIdSetOk(Set(0L, 1L, 2L))
             case GetNodeState(_) =>
               sender() ! GetNodeStateOk(active = true)
