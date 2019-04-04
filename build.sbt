@@ -5,7 +5,7 @@ lazy val commonSettings = Seq(
   version := "0.0.1",
   scalafmtOnCompile in ThisBuild := true,
   scalafmtVersion in ThisBuild := "1.4.0",
-  scalaVersion := "2.12.5",
+  scalaVersion := "2.12.8",
   resolvers ++= Seq(
     "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
     Resolver.jcenterRepo,
