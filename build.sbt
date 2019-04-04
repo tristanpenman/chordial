@@ -29,9 +29,9 @@ lazy val commonSettings = Seq(
   )
 )
 
-lazy val akkaVersion = "2.5.12"
-lazy val akkaHttpVersion = "10.1.1"
-lazy val scalatestVersion = "3.0.5"
+lazy val akkaVersion = "2.5.17"
+lazy val akkaHttpVersion = "10.1.4"
+lazy val scalatestVersion = "3.0.7"
 
 lazy val core = project
   .in(file("modules/core"))
