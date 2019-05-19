@@ -3,18 +3,19 @@ package com.tristanpenman.chordial.demo
 import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
+import com.tristanpenman.chordial.core.Event.NodeShuttingDown
 import com.tristanpenman.chordial.core.Node
 import com.tristanpenman.chordial.core.Node._
-import com.tristanpenman.chordial.core.Event.NodeShuttingDown
 import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
+
 import scala.annotation.tailrec
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 
 final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
-  import context.dispatcher
   import Governor._
+  import context.dispatcher
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
 
@@ -30,7 +31,6 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
   private val checkPredecessorTimeout = Timeout(2500.milliseconds)
   private val fixFingersTimeout = Timeout(3000.milliseconds)
-  private val livenessCheckDuration = 2000.milliseconds
   private val joinRequestTimeout = Timeout(2000.milliseconds)
   private val getSuccessorRequestTimeout = Timeout(2000.milliseconds)
   private val stabiliseTimeout = Timeout(1500.milliseconds)
@@ -103,7 +103,6 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
         keyspaceBits,
         algorithmTimeout,
         externalRequestTimeout,
-        livenessCheckDuration,
         context.system.eventStream
       )
     )

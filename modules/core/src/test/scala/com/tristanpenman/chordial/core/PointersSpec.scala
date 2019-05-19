@@ -10,7 +10,6 @@ import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 final class PointersSpec
     extends TestKit(ActorSystem("PointersSpec"))
@@ -38,7 +37,7 @@ final class PointersSpec
         system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
 
       "respond to a GetId message with a GetIdOk message containing its ID" in {
-        newPointersActor ! GetId()
+        newPointersActor ! GetId
         expectMsg(GetIdOk(1L))
       }
 
@@ -63,7 +62,7 @@ final class PointersSpec
         val future = actor.ask(UpdatePredecessor(NodeInfo(0L, self)))
 
         // Wait for update to be acknowledged
-        assert(future.futureValue == UpdatePredecessorOk())
+        assert(future.futureValue == UpdatePredecessorOk)
         actor
       }
 
@@ -77,7 +76,7 @@ final class PointersSpec
         val pointersActor = newPointersActor
 
         pointersActor ! ResetPredecessor
-        expectMsg(ResetPredecessorOk())
+        expectMsg(ResetPredecessorOk)
 
         pointersActor ! GetPredecessor
         expectMsg(GetPredecessorOkButUnknown)

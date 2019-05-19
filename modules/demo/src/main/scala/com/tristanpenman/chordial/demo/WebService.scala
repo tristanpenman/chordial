@@ -6,9 +6,10 @@ import akka.http.scaladsl.server.Directives._
 import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.demo.Governor._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
 import spray.json._
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object WebService extends DefaultJsonProtocol {
   final case class NodeAttributes(nodeId: Long, successorId: Option[Long], active: Boolean)
@@ -86,7 +87,7 @@ trait WebService {
         onComplete(future) {
           case util.Success(result) =>
             complete(result.toJson.compactPrint)
-          case util.Failure(exception) =>
+          case util.Failure(exception @ _) =>
             complete(InternalServerError -> messageForInternalServerError)
         }
       } ~ post {
@@ -97,7 +98,7 @@ trait WebService {
                 .ask(CreateNodeWithSeed(seedId.toLong))
                 .mapTo[CreateNodeWithSeedResponse]
               onSuccess(future) {
-                case CreateNodeWithSeedOk(nodeId, nodeRef) =>
+                case CreateNodeWithSeedOk(nodeId, nodeRef @ _) =>
                   complete(NodeAttributes(nodeId, Some(seedId.toLong), active = true).toJson.compactPrint)
                 case CreateNodeWithSeedInternalError(_) =>
                   complete(InternalServerError -> messageForInternalServerError)
@@ -108,7 +109,7 @@ trait WebService {
               val future =
                 governor.ask(CreateNode).mapTo[CreateNodeResponse]
               onSuccess(future) {
-                case CreateNodeOk(nodeId, nodeRef) =>
+                case CreateNodeOk(nodeId, nodeRef @ _) =>
                   complete(NodeAttributes(nodeId, Some(nodeId), active = true).toJson.compactPrint)
                 case CreateNodeInternalError(_) =>
                   complete(InternalServerError -> messageForInternalServerError)

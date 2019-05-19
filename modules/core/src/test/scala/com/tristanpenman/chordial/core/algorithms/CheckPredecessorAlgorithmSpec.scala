@@ -9,7 +9,6 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 final class CheckPredecessorAlgorithmSpec
     extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec"))
@@ -52,9 +51,9 @@ final class CheckPredecessorAlgorithmSpec
         })
 
       "finish successfully without sending any further messages" in {
-        newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart()
-        expectMsg(CheckPredecessorAlgorithmFinished())
-        expectNoMsg(spuriousMessageDuration)
+        newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart
+        expectMsg(CheckPredecessorAlgorithmFinished)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -78,9 +77,9 @@ final class CheckPredecessorAlgorithmSpec
       }
 
       "finish successfully without sending any further messages" in {
-        newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart()
-        expectMsg(CheckPredecessorAlgorithmFinished())
-        expectNoMsg(spuriousMessageDuration)
+        newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart
+        expectMsg(CheckPredecessorAlgorithmFinished)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -107,9 +106,9 @@ final class CheckPredecessorAlgorithmSpec
 
       "finish successfully after sending a ResetPredecessor message to the Pointer actor" in {
         val pointersActor = newPointersActor
-        newAlgorithmActor(pointersActor) ! CheckPredecessorAlgorithmStart()
-        expectMsg(CheckPredecessorAlgorithmFinished())
-        expectNoMsg(spuriousMessageDuration)
+        newAlgorithmActor(pointersActor) ! CheckPredecessorAlgorithmStart
+        expectMsg(CheckPredecessorAlgorithmFinished)
+        expectNoMessage(spuriousMessageDuration)
         pointersActor ! GetPredecessor
         expectMsg(GetPredecessorOkButUnknown)
       }
@@ -117,9 +116,9 @@ final class CheckPredecessorAlgorithmSpec
 
     "initialised with a Pointers actor that is unresponsive" should {
       "finish with an error" in {
-        newAlgorithmActor(unresponsiveActor) ! CheckPredecessorAlgorithmStart()
+        newAlgorithmActor(unresponsiveActor) ! CheckPredecessorAlgorithmStart
         expectMsgType[CheckPredecessorAlgorithmError]
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
   }

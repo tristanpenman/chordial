@@ -14,13 +14,11 @@ import com.tristanpenman.chordial.core.algorithms._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
 
 final class Node(nodeId: Long,
                  keyspaceBits: Int,
                  algorithmTimeout: Timeout,
                  externalRequestTimeout: Timeout,
-                 livenessCheckDuration: Duration,
                  eventStream: EventStream)
     extends Actor
     with ActorLogging {
@@ -216,7 +214,7 @@ final class Node(nodeId: Long,
     case CheckPredecessor =>
       checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender())
 
-    case m @ ClosestPrecedingNode(queryId: Long) =>
+    case ClosestPrecedingNode(queryId: Long) =>
       closestPrecedingFinger(nodeRef, queryId, sender())
 
     case m @ GetId =>
@@ -350,7 +348,6 @@ object Node {
             keyspaceBits: Int,
             algorithmTimeout: Timeout,
             requestTimeout: Timeout,
-            livenessCheckDuration: Duration,
             eventStream: EventStream): Props =
-    Props(new Node(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, livenessCheckDuration, eventStream))
+    Props(new Node(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, eventStream))
 }

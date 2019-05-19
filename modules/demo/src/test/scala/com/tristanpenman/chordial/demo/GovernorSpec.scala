@@ -6,12 +6,8 @@ import com.tristanpenman.chordial.demo.Governor._
 import org.scalatest._
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordSpecLike with ImplicitSender {
-
-  // Time to wait before concluding that a node creation confirmation will not be received
-  private val creationDuration = 1000.milliseconds
 
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds
@@ -39,7 +35,7 @@ final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordS
       "respond to a CreateNode message with a CreateNodeOk message, and then no further messages" in {
         newGovernor ! CreateNode
         expectMsgType[CreateNodeOk]
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
 
       "respond to two CreateNode messages with two unique CreateNodeOk messages, and then no further messages" in {

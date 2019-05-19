@@ -55,6 +55,7 @@ lazy val demo = project
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-remote" % akkaVersion,
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+      "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % "test",
       "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
       "org.scalatest" %% "scalatest" % scalatestVersion % "test"
     )

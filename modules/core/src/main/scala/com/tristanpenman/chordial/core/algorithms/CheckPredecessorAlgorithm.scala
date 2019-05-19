@@ -7,7 +7,6 @@ import com.tristanpenman.chordial.core.Pointers._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.language.postfixOps
 
 /**
   * Actor class that implements the CheckPredecessor algorithm
@@ -72,7 +71,7 @@ final class CheckPredecessorAlgorithm(initialPointersRef: ActorRef, initialReque
               case GetSuccessorListOk(_, _) => false // Predecessor is active
             }
             .recover {
-              case exception => true // Predecessor has failed
+              case exception @ _ => true // Predecessor has failed
             }
         case None =>
           Future { false } // Predecessor pointer has not been set

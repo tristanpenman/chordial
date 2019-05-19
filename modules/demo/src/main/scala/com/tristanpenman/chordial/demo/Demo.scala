@@ -3,18 +3,19 @@ package com.tristanpenman.chordial.demo
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.TextMessage
-import akka.stream.{ActorAttributes, ActorMaterializer, OverflowStrategy, Supervision}
 import akka.stream.scaladsl._
+import akka.stream.{ActorAttributes, ActorMaterializer, OverflowStrategy, Supervision}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Event, Event._
+import com.tristanpenman.chordial.core.Event
+import com.tristanpenman.chordial.core.Event._
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
 object Demo extends App {
   implicit val system = ActorSystem("chordial-demo")
   implicit val mat = ActorMaterializer()
-
-  import system.dispatcher
+  implicit val ec = system.dispatcher
 
   implicit val timeout: Timeout = 3.seconds
 

@@ -10,7 +10,6 @@ import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
-import scala.language.postfixOps
 
 /**
   * Actor class that implements the Stabilise algorithm
@@ -94,7 +93,7 @@ final class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: Ac
           case m => (m, primarySuccessor, failedNodeIds)
         }
         .recoverWith {
-          case ex: AskTimeoutException =>
+          case _: AskTimeoutException =>
             switchToNextSuccessor(backupSuccessors)
             forwardMessage(backupSuccessors.head, backupSuccessors.tail, failedNodeIds + primarySuccessor.id)
         }

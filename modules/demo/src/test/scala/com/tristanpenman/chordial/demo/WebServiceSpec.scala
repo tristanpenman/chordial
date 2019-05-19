@@ -5,13 +5,15 @@ import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.demo.Governor._
 import org.scalatest.WordSpec
 import org.scalatest.Matchers._
-import spray.http.StatusCodes
+import akka.http.scaladsl.model.StatusCodes
 import spray.json._
-import spray.testkit.ScalatestRouteTest
+import akka.http.scaladsl.testkit.ScalatestRouteTest
 
-final class WebServiceSpec extends WordSpec with WebService with ScalatestRouteTest {
+final class WebServiceSpec extends WordSpec with ScalatestRouteTest with WebService {
 
   import WebService._
+
+  override implicit val ec = system.dispatcher
 
   def actorRefFactory: ActorSystem = system
 
@@ -30,7 +32,7 @@ final class WebServiceSpec extends WordSpec with WebService with ScalatestRouteT
           def receive: Receive = {
             case CreateNode =>
               sender() ! CreateNodeOk(1L, dummyActor)
-            case CreateNodeWithSeed(seedId) =>
+            case CreateNodeWithSeed(seedId @ _) =>
               sender() ! CreateNodeWithSeedOk(2L, dummyActor)
             case GetNodeIdSet =>
               sender() ! GetNodeIdSetOk(Set.empty)

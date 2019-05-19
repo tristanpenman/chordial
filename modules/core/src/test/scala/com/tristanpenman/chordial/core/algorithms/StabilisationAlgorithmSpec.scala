@@ -11,7 +11,6 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 final class StabilisationAlgorithmSpec
     extends TestKit(ActorSystem("StabilisationAlgorithmSpec"))
@@ -25,8 +24,6 @@ final class StabilisationAlgorithmSpec
 
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds
-
-  private val livenessCheckDuration = 100.milliseconds
 
   // Actor that will cause test to fail if it receives any messages
   private val dummyActorRef: ActorRef = TestActorRef(new Actor {
@@ -74,7 +71,7 @@ final class StabilisationAlgorithmSpec
       "finish successfully without sending any further messages" in {
         newAlgorithm ! StabilisationAlgorithmStart
         expectMsg(StabilisationAlgorithmFinished)
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -93,7 +90,7 @@ final class StabilisationAlgorithmSpec
             .props(1L, keyspaceBits, NodeInfo(2L, node2), system.eventStream)
         )
         pointersRef ! UpdatePredecessor(NodeInfo(3L, node3))
-        expectMsg(UpdatePredecessorOk())
+        expectMsg(UpdatePredecessorOk)
         val backupSuccessors =
           List(NodeInfo(3L, node3), NodeInfo(1L, testProbeForNode1.ref))
         pointersRef ! UpdateSuccessorList(NodeInfo(2L, node2), backupSuccessors)
@@ -130,9 +127,9 @@ final class StabilisationAlgorithmSpec
         testProbeForNode1.reply(NotifyOk)
 
         expectMsg(StabilisationAlgorithmFinished)
-        expectNoMsg(spuriousMessageDuration)
-        pointersTestProbe.expectNoMsg(spuriousMessageDuration)
-        testProbeForNode1.expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
+        pointersTestProbe.expectNoMessage(spuriousMessageDuration)
+        testProbeForNode1.expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -163,7 +160,7 @@ final class StabilisationAlgorithmSpec
             .props(1L, keyspaceBits, NodeInfo(2L, node2), system.eventStream)
         )
         pointersRef ! UpdatePredecessor(NodeInfo(3L, node3))
-        expectMsg(UpdatePredecessorOk())
+        expectMsg(UpdatePredecessorOk)
         pointersRef ! UpdateSuccessorList(NodeInfo(2L, node2), List(NodeInfo(3L, node3), NodeInfo(1L, dummyActorRef)))
         expectMsg(UpdateSuccessorListOk)
 
@@ -190,8 +187,8 @@ final class StabilisationAlgorithmSpec
         pointersTestProbe.forward(pointersRef)
 
         expectMsg(StabilisationAlgorithmFinished)
-        expectNoMsg(spuriousMessageDuration)
-        pointersTestProbe.expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
+        pointersTestProbe.expectNoMessage(spuriousMessageDuration)
       }
     }
   }

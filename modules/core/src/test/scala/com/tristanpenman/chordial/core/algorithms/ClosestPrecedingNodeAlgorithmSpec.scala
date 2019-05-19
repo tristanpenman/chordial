@@ -10,7 +10,6 @@ import org.scalatest.WordSpecLike
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 final class ClosestPrecedingNodeAlgorithmSpec
     extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec"))
@@ -77,7 +76,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
           newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -109,7 +108,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
           newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -141,7 +140,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
           newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
 
@@ -149,7 +148,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
       "return an error" in {
         newAlgorithmActor(NodeInfo(1L, dummyActorRef), unresponsiveActor) ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmError]
-        expectNoMsg(spuriousMessageDuration)
+        expectNoMessage(spuriousMessageDuration)
       }
     }
   }
