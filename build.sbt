@@ -26,7 +26,10 @@ lazy val commonSettings = Seq(
     "-Ywarn-infer-any",
     "-Ywarn-nullary-override",
     "-Ywarn-unused:_"
-  )
+  ),
+  // Work-around for metaspace OOM issues that occur with Scala 2.12.8 and sbt 1.3.0-RC1
+  fork in Test := true,
+  javaOptions in Test ++= Seq("-Xmx256m")
 )
 
 lazy val akkaVersion = "2.5.17"
