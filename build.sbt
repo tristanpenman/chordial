@@ -7,7 +7,7 @@ lazy val commonSettings = Seq(
   scalafmtVersion in ThisBuild := "1.4.0",
   scalaVersion := "2.12.8",
   resolvers ++= Seq(
-    "Typesafe Releases" at "http://repo.typesafe.com/typesafe/maven-releases/",
+    "Typesafe Releases" at "https://repo.typesafe.com/typesafe/maven-releases/",
     Resolver.jcenterRepo,
     Resolver.sonatypeRepo("releases"),
     Resolver.bintrayRepo("akka", "maven")
@@ -32,8 +32,8 @@ lazy val commonSettings = Seq(
   javaOptions in Test ++= Seq("-Xmx256m")
 )
 
-lazy val akkaVersion = "2.5.17"
-lazy val akkaHttpVersion = "10.1.4"
+lazy val akkaVersion = "2.5.25"
+lazy val akkaHttpVersion = "10.1.0"
 lazy val scalatestVersion = "3.0.7"
 
 lazy val core = project
