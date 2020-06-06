@@ -56,7 +56,7 @@ final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordS
       def newGovernor: ActorRef = {
         val governor = system.actorOf(Governor.props(keyspaceBits))
         1 to (1 << keyspaceBits) foreach {
-          case _ =>
+          _ =>
             governor ! CreateNode
             expectMsgType[CreateNodeOk]
         }

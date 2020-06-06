@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-US">
 <head>
     <meta charset="utf-8"/>
     <title>WebSocket Test</title>
@@ -38,7 +38,7 @@
 <body>
 <h2>Chord Stabilisation Demo</h2>
 </body>
-<script language="javascript" type="text/javascript">
+<script type="text/javascript">
 
     d3.selection.prototype.moveToFront = function () {
         return this.each(function () {
@@ -160,7 +160,7 @@
 
             var websocket = new WebSocket(wsUri);
 
-            websocket.onclose = function (event) {
+            websocket.onclose = function () {
                 console.log("Connection closed");
             };
 

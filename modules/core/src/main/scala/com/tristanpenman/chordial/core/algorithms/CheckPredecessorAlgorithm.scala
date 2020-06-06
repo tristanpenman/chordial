@@ -71,7 +71,7 @@ final class CheckPredecessorAlgorithm(initialPointersRef: ActorRef, initialReque
               case GetSuccessorListOk(_, _) => false // Predecessor is active
             }
             .recover {
-              case exception @ _ => true // Predecessor has failed
+              case _ => true // Predecessor has failed
             }
         case None =>
           Future { false } // Predecessor pointer has not been set

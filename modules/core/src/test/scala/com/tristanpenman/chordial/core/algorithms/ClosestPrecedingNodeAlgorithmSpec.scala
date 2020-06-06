@@ -62,7 +62,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
       val testCases = 0 to 4
 
       testCases.foreach {
-        case input =>
+        input =>
           "return a pointer for Node with ID 1 when queried for ID " + input in {
             val algorithm =
               newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)

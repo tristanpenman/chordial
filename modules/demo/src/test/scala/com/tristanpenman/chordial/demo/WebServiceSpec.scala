@@ -32,7 +32,7 @@ final class WebServiceSpec extends WordSpec with ScalatestRouteTest with WebServ
           def receive: Receive = {
             case CreateNode =>
               sender() ! CreateNodeOk(1L, dummyActor)
-            case CreateNodeWithSeed(seedId @ _) =>
+            case CreateNodeWithSeed(_) =>
               sender() ! CreateNodeWithSeedOk(2L, dummyActor)
             case GetNodeIdSet =>
               sender() ! GetNodeIdSetOk(Set.empty)

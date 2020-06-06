@@ -36,11 +36,11 @@ final class FindSuccessorAlgorithm extends Actor with ActorLogging {
   }
 
   def awaitFindPredecessor(delegate: ActorRef): Receive = {
-    case FindPredecessorOk(queryId @ _, predecessor) =>
+    case FindPredecessorOk(_, predecessor) =>
       predecessor.ref ! GetSuccessorList
       context.become(awaitGetSuccessorList(delegate))
 
-    case FindPredecessorError(queryId @ _, message) =>
+    case FindPredecessorError(_, message) =>
       delegate ! FindSuccessorAlgorithmError(message)
       context.stop(self)
 

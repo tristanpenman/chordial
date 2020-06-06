@@ -40,25 +40,24 @@ trait WebService {
         case GetNodeStateInvalidRequest(message) =>
           throw new Exception(s"Governor rejected request for node state ($message)")
       }
-      .flatMap {
-        case active =>
-          if (active) {
-            governor
-              .ask(GetNodeSuccessorId(nodeId))
-              .mapTo[GetNodeSuccessorIdResponse]
-              .map {
-                case GetNodeSuccessorIdOk(successorId) =>
-                  NodeAttributes(nodeId, Some(successorId), active = true)
-                case GetNodeSuccessorIdError(message) =>
-                  throw new Exception(message)
-                case GetNodeSuccessorIdInvalidRequest(message) =>
-                  throw new Exception(s"Governor rejected request for node successor ID ($message)")
-              }
-          } else {
-            Future {
-              NodeAttributes(nodeId, None, active = false)
+      .flatMap { active =>
+        if (active) {
+          governor
+            .ask(GetNodeSuccessorId(nodeId))
+            .mapTo[GetNodeSuccessorIdResponse]
+            .map {
+              case GetNodeSuccessorIdOk(successorId) =>
+                NodeAttributes(nodeId, Some(successorId), active = true)
+              case GetNodeSuccessorIdError(message) =>
+                throw new Exception(message)
+              case GetNodeSuccessorIdInvalidRequest(message) =>
+                throw new Exception(s"Governor rejected request for node successor ID ($message)")
             }
+        } else {
+          Future {
+            NodeAttributes(nodeId, None, active = false)
           }
+        }
       }
 
   private def getNodes(governor: ActorRef): Future[Iterable[NodeAttributes]] =
@@ -67,7 +66,7 @@ trait WebService {
       .mapTo[GetNodeIdSetResponse]
       .flatMap {
         case GetNodeIdSetOk(nodeIdSet) =>
-          Future.sequence(nodeIdSet.map { case nodeId => getNodeAttributes(governor, nodeId) })
+          Future.sequence(nodeIdSet.map(nodeId => getNodeAttributes(governor, nodeId)))
       }
 
   private def terminateNode(governor: ActorRef, nodeId: Long): Future[Unit] =
@@ -87,36 +86,34 @@ trait WebService {
         onComplete(future) {
           case util.Success(result) =>
             complete(result.toJson.compactPrint)
-          case util.Failure(exception @ _) =>
+          case util.Failure(_) =>
             complete(InternalServerError -> messageForInternalServerError)
         }
       } ~ post {
-        parameters('seed_id.?) { (maybeSeedId) =>
-          maybeSeedId match {
-            case Some(seedId) =>
-              val future = governor
-                .ask(CreateNodeWithSeed(seedId.toLong))
-                .mapTo[CreateNodeWithSeedResponse]
-              onSuccess(future) {
-                case CreateNodeWithSeedOk(nodeId, nodeRef @ _) =>
-                  complete(NodeAttributes(nodeId, Some(seedId.toLong), active = true).toJson.compactPrint)
-                case CreateNodeWithSeedInternalError(_) =>
-                  complete(InternalServerError -> messageForInternalServerError)
-                case CreateNodeWithSeedInvalidRequest(message) =>
-                  complete(BadRequest -> message)
-              }
-            case None =>
-              val future =
-                governor.ask(CreateNode).mapTo[CreateNodeResponse]
-              onSuccess(future) {
-                case CreateNodeOk(nodeId, nodeRef @ _) =>
-                  complete(NodeAttributes(nodeId, Some(nodeId), active = true).toJson.compactPrint)
-                case CreateNodeInternalError(_) =>
-                  complete(InternalServerError -> messageForInternalServerError)
-                case CreateNodeInvalidRequest(message) =>
-                  complete(BadRequest -> message)
-              }
-          }
+        parameters('seed_id.?) {
+          case Some(seedId) =>
+            val future = governor
+              .ask(CreateNodeWithSeed(seedId.toLong))
+              .mapTo[CreateNodeWithSeedResponse]
+            onSuccess(future) {
+              case CreateNodeWithSeedOk(nodeId, _) =>
+                complete(NodeAttributes(nodeId, Some(seedId.toLong), active = true).toJson.compactPrint)
+              case CreateNodeWithSeedInternalError(_) =>
+                complete(InternalServerError -> messageForInternalServerError)
+              case CreateNodeWithSeedInvalidRequest(message) =>
+                complete(BadRequest -> message)
+            }
+          case None =>
+            val future =
+              governor.ask(CreateNode).mapTo[CreateNodeResponse]
+            onSuccess(future) {
+              case CreateNodeOk(nodeId, _) =>
+                complete(NodeAttributes(nodeId, Some(nodeId), active = true).toJson.compactPrint)
+              case CreateNodeInternalError(_) =>
+                complete(InternalServerError -> messageForInternalServerError)
+              case CreateNodeInvalidRequest(message) =>
+                complete(BadRequest -> message)
+            }
         }
       }
     } ~ path(IntNumber) { nodeId =>

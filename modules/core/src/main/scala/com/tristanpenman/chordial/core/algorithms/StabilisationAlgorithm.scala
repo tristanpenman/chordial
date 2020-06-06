@@ -89,9 +89,7 @@ final class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: Ac
                        failedNodeIds: Set[Long]): Future[(Any, NodeInfo, Set[Long])] =
       primarySuccessor.ref
         .ask(msg)(requestTimeout)
-        .map {
-          case m => (m, primarySuccessor, failedNodeIds)
-        }
+        .map(m => (m, primarySuccessor, failedNodeIds))
         .recoverWith {
           case _: AskTimeoutException =>
             switchToNextSuccessor(backupSuccessors)
