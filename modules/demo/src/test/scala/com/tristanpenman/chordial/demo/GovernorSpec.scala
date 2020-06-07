@@ -55,10 +55,9 @@ final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordS
     "already at its Node capacity" should {
       def newGovernor: ActorRef = {
         val governor = system.actorOf(Governor.props(keyspaceBits))
-        1 to (1 << keyspaceBits) foreach {
-          _ =>
-            governor ! CreateNode
-            expectMsgType[CreateNodeOk]
+        1 to (1 << keyspaceBits) foreach { _ =>
+          governor ! CreateNode
+          expectMsgType[CreateNodeOk]
         }
         governor
       }

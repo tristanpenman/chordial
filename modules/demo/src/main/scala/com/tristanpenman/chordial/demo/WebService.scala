@@ -90,7 +90,7 @@ trait WebService {
             complete(InternalServerError -> messageForInternalServerError)
         }
       } ~ post {
-        parameters('seed_id.?) {
+        parameters(Symbol("seed_id").?) {
           case Some(seedId) =>
             val future = governor
               .ask(CreateNodeWithSeed(seedId.toLong))
