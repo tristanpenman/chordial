@@ -59,3 +59,20 @@ lazy val demo = project
       "org.scalatest" %% "scalatest" % scalatestVersion % "test"
     )
   )
+
+lazy val dht = project
+  .in(file("modules/dht"))
+  .dependsOn(core)
+  .settings(commonSettings: _*)
+  .settings(
+    libraryDependencies ++= Seq(
+      "ch.megard" %% "akka-http-cors" % "0.4.3",
+      "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-remote" % akkaVersion,
+      "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+      "com.typesafe.akka" %% "akka-stream-testkit" % akkaVersion % "test",
+      "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % "test",
+      "org.scalatest" %% "scalatest" % scalatestVersion % "test"
+    )
+  )
