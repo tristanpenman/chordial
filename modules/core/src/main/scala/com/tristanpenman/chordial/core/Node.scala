@@ -34,6 +34,7 @@ final class Node(nodeId: Long,
   // Finger table ranges from (nodeId + 2^1) up to (nodeId + 2^(keyspace - 1))
   private def fingerTableSize = keyspaceBits - 1
 
+  private val checkPredecessorTimeout = Timeout(2500.milliseconds)
   private val stabiliseTimeout = Timeout(1500.milliseconds)
 
   // Check that node ID is reasonable
@@ -54,28 +55,6 @@ final class Node(nodeId: Long,
       StabilisationAlgorithm
         .props(NodeInfo(nodeId, self), pointersRef, externalRequestTimeout)
     )
-
-  private def checkPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithm: ActorRef, replyTo: ActorRef) =
-    checkPredecessorAlgorithm
-      .ask(CheckPredecessorAlgorithmStart)(algorithmTimeout)
-      .mapTo[CheckPredecessorAlgorithmStartResponse]
-      .map {
-        case CheckPredecessorAlgorithmAlreadyRunning =>
-          CheckPredecessorInProgress
-        case CheckPredecessorAlgorithmFinished =>
-          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
-          CheckPredecessorOk
-        case CheckPredecessorAlgorithmError(message) =>
-          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
-          CheckPredecessorError(message)
-      }
-      .recover {
-        case exception =>
-          log.error(exception.getMessage)
-          checkPredecessorAlgorithm ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
-          CheckPredecessorError("CheckPredecessor request failed due to internal error")
-      }
-      .pipeTo(replyTo)
 
   private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
     val algorithm = context.actorOf(
@@ -189,7 +168,28 @@ final class Node(nodeId: Long,
       .pipeTo(replyTo)
   }
 
-  private def scheduleStabilisation(stabilisationAlgorithmRef: ActorRef, nodeRef: ActorRef) =
+  private def scheduleCheckPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithmRef: ActorRef) =
+    context.system.scheduler.schedule(300.milliseconds, 300.milliseconds) {
+      checkPredecessorAlgorithmRef
+        .ask(CheckPredecessorAlgorithmStart)(checkPredecessorTimeout)
+        .mapTo[CheckPredecessorAlgorithmStartResponse]
+        .map {
+          case CheckPredecessorAlgorithmAlreadyRunning =>
+            log.warning("CheckPredecessor already in progress")
+          case CheckPredecessorAlgorithmFinished =>
+            checkPredecessorAlgorithmRef ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
+          case CheckPredecessorAlgorithmError(message) =>
+            log.error("CheckPredecessor failed: {}", message)
+            checkPredecessorAlgorithmRef ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
+        }
+        .recover {
+          case exception =>
+            log.error("CheckPredecessor recovery failed: {}", exception.getMessage)
+            checkPredecessorAlgorithmRef ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
+        }
+    }
+
+  private def scheduleStabilisation(nodeRef: ActorRef, stabilisationAlgorithmRef: ActorRef) =
     context.system.scheduler.schedule(200.milliseconds, 200.milliseconds) {
       stabilisationAlgorithmRef
         .ask(StabilisationAlgorithmStart)(stabiliseTimeout)
@@ -218,11 +218,9 @@ final class Node(nodeId: Long,
 
   def receiveWhileReady(nodeRef: ActorRef,
                         checkPredecessorAlgorithm: ActorRef,
+                        checkPredecessorCancellable: Cancellable,
                         stabilisationAlgorithm: ActorRef,
                         stabilisationCancellable: Cancellable): Receive = {
-    case CheckPredecessor =>
-      checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender())
-
     case ClosestPrecedingNode(queryId: Long) =>
       closestPrecedingFinger(nodeRef, queryId, sender())
 
@@ -245,6 +243,7 @@ final class Node(nodeId: Long,
       fixFingers(sender())
 
     case Join(seedId, seedRef) =>
+      checkPredecessorCancellable.cancel()
       stabilisationCancellable.cancel()
 
       context.stop(nodeRef)
@@ -252,13 +251,18 @@ final class Node(nodeId: Long,
       context.stop(stabilisationAlgorithm)
 
       val newPointersRef = newPointers(nodeId, seedId, seedRef)
+
+      val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
+      val newCheckPredecessorCancellable = scheduleCheckPredecessor(newPointersRef, newCheckPredecessorAlgorithmRef)
+
       val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
-      val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef, newPointersRef)
+      val newStabilisationCancellable = scheduleStabilisation(newPointersRef, newStabilisationAlgorithmRef)
 
       context.become(
         receiveWhileReady(
           newPointersRef,
-          newCheckPredecessorAlgorithm(newPointersRef),
+          newCheckPredecessorAlgorithmRef,
+          newCheckPredecessorCancellable,
           newStabilisationAlgorithmRef,
           newStabilisationCancellable
         )
@@ -272,13 +276,17 @@ final class Node(nodeId: Long,
 
   override def receive: Receive = {
     val newPointersRef = newPointers(nodeId, nodeId, self)
+
     val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
+    val newCheckPredecessorCancellable = scheduleCheckPredecessor(newPointersRef, newCheckPredecessorAlgorithmRef)
+
     val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
-    val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef, newPointersRef)
+    val newStabilisationCancellable = scheduleStabilisation(newPointersRef, newStabilisationAlgorithmRef)
 
     receiveWhileReady(
       newPointersRef,
       newCheckPredecessorAlgorithmRef,
+      newCheckPredecessorCancellable,
       newStabilisationAlgorithmRef,
       newStabilisationCancellable
     )
@@ -290,16 +298,6 @@ object Node {
   sealed trait Request
 
   sealed trait Response
-
-  case object CheckPredecessor extends Request
-
-  sealed trait CheckPredecessorResponse extends Response
-
-  case object CheckPredecessorInProgress extends CheckPredecessorResponse
-
-  case object CheckPredecessorOk extends CheckPredecessorResponse
-
-  final case class CheckPredecessorError(message: String) extends CheckPredecessorResponse
 
   final case class ClosestPrecedingNode(queryId: Long) extends Request
 

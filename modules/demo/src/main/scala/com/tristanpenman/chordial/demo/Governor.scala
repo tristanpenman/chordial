@@ -29,30 +29,9 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   // running to completion
   private val algorithmTimeout = Timeout(5000.milliseconds)
 
-  private val checkPredecessorTimeout = Timeout(2500.milliseconds)
   private val fixFingersTimeout = Timeout(3000.milliseconds)
   private val joinRequestTimeout = Timeout(2000.milliseconds)
   private val getSuccessorRequestTimeout = Timeout(2000.milliseconds)
-
-  private def scheduleCheckPredecessor(nodeRef: ActorRef) =
-    context.system.scheduler.schedule(300.milliseconds, 300.milliseconds) {
-      nodeRef
-        .ask(CheckPredecessor)(checkPredecessorTimeout)
-        .mapTo[CheckPredecessorResponse]
-        .onComplete {
-          case util.Success(result) =>
-            result match {
-              case CheckPredecessorOk =>
-                log.debug("CheckPredecessor (requested for {}) finished successfully", nodeRef.path)
-              case CheckPredecessorInProgress =>
-                log.warning("CheckPredecessor (requested for {}) already in progress", nodeRef.path)
-              case CheckPredecessorError(message) =>
-                log.error("CheckPredecessor (requested for {}) finished with error: {}", nodeRef.path, message)
-            }
-          case util.Failure(exception) =>
-            log.error("CheckPredecessor (requested for {}) failed with an exception: {}", nodeRef.path, exception)
-        }
-    }
 
   private def scheduleFixFingers(nodeRef: ActorRef) =
     context.system.scheduler.schedule(500.milliseconds, 500.milliseconds) {
@@ -93,19 +72,16 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
   private def receiveWithNodes(nodes: Map[Long, ActorRef],
                                terminatedNodes: Set[Long],
-                               checkPredecessorCancellables: Map[Long, Cancellable],
                                fixFingersCancellables: Map[Long, Cancellable]): Receive = {
     case CreateNode =>
       if (nodes.size < idModulus) {
         val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
         val nodeRef = createNode(nodeId)
-        val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
         val fixFingersCancellable = scheduleFixFingers(nodeRef)
         context.become(
           receiveWithNodes(
             nodes + (nodeId -> nodeRef),
             terminatedNodes,
-            checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
             fixFingersCancellables + (nodeId -> fixFingersCancellable)
           )
         )
@@ -133,13 +109,11 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
             Await.result(joinRequest, Duration.Inf) match {
               case Success(()) =>
-                val checkPredecessorCancellable = scheduleCheckPredecessor(nodeRef)
                 val fixFingersCancellable = scheduleFixFingers(nodeRef)
                 context.become(
                   receiveWithNodes(
                     nodes + (nodeId -> nodeRef),
                     terminatedNodes,
-                    checkPredecessorCancellables + (nodeId -> checkPredecessorCancellable),
                     fixFingersCancellables + (nodeId -> fixFingersCancellable)
                   )
                 )
@@ -193,14 +167,12 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
     case TerminateNode(nodeId: Long) =>
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
-          checkPredecessorCancellables.get(nodeId).foreach(_.cancel())
           fixFingersCancellables.get(nodeId).foreach(_.cancel())
           context.stop(nodeRef)
           context.become(
             receiveWithNodes(
               nodes - nodeId,
               terminatedNodes + nodeId,
-              checkPredecessorCancellables - nodeId,
               fixFingersCancellables - nodeId
             )
           )
@@ -213,7 +185,7 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   }
 
   override def receive: Receive =
-    receiveWithNodes(Map.empty, Set.empty, Map.empty, Map.empty)
+    receiveWithNodes(Map.empty, Set.empty, Map.empty)
 }
 
 object Governor {
