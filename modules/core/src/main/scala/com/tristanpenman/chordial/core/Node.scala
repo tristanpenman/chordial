@@ -144,9 +144,6 @@ final class Node(nodeId: Long,
       .pipeTo(sender)
   }
 
-  private def fixFingers(sender: ActorRef): Unit =
-    sender ! FixFingersError("FixFingers request handler not implemented")
-
   private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef) = {
     val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
     notifyAlgorithm
@@ -239,9 +236,6 @@ final class Node(nodeId: Long,
     case FindSuccessor(queryId) =>
       findSuccessor(queryId, sender())
 
-    case FixFingers =>
-      fixFingers(sender())
-
     case Join(seedId, seedRef) =>
       checkPredecessorCancellable.cancel()
       stabilisationCancellable.cancel()
@@ -322,16 +316,6 @@ object Node {
   final case class FindSuccessorOk(queryId: Long, successor: NodeInfo) extends FindSuccessorResponse
 
   final case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
-
-  case object FixFingers extends Request
-
-  sealed trait FixFingersResponse extends Response
-
-  case object FixFingersOk extends FixFingersResponse
-
-  case object FixFingersInProgress extends FixFingersResponse
-
-  final case class FixFingersError(message: String) extends FixFingersResponse
 
   final case class Join(seedId: Long, seedRef: ActorRef) extends Request
 
