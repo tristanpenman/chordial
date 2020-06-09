@@ -14,6 +14,7 @@ import com.tristanpenman.chordial.core.algorithms._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 final class Node(nodeId: Long,
                  keyspaceBits: Int,
@@ -32,6 +33,8 @@ final class Node(nodeId: Long,
 
   // Finger table ranges from (nodeId + 2^1) up to (nodeId + 2^(keyspace - 1))
   private def fingerTableSize = keyspaceBits - 1
+
+  private val stabiliseTimeout = Timeout(1500.milliseconds)
 
   // Check that node ID is reasonable
   require(nodeId >= 0, "ownId must be a non-negative Long value")
@@ -186,31 +189,37 @@ final class Node(nodeId: Long,
       .pipeTo(replyTo)
   }
 
-  private def stabilise(nodeRef: ActorRef, stabilisationAlgorithm: ActorRef, replyTo: ActorRef) =
-    stabilisationAlgorithm
-      .ask(StabilisationAlgorithmStart)(algorithmTimeout)
-      .mapTo[StabilisationAlgorithmStartResponse]
-      .map {
-        case StabilisationAlgorithmAlreadyRunning =>
-          StabiliseInProgress
-        case StabilisationAlgorithmFinished =>
-          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
-          StabiliseOk
-        case StabilisationAlgorithmError(message) =>
-          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
-          StabiliseError(message)
-      }
-      .recover {
-        case exception =>
-          log.error(exception.getMessage)
-          stabilisationAlgorithm ! StabilisationAlgorithmReset(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
-          StabiliseError("Stabilise request failed due to internal error")
-      }
-      .pipeTo(replyTo)
+  private def scheduleStabilisation(stabilisationAlgorithmRef: ActorRef, nodeRef: ActorRef) =
+    context.system.scheduler.schedule(200.milliseconds, 200.milliseconds) {
+      stabilisationAlgorithmRef
+        .ask(StabilisationAlgorithmStart)(stabiliseTimeout)
+        .mapTo[StabilisationAlgorithmStartResponse]
+        .map {
+          case StabilisationAlgorithmAlreadyRunning =>
+            log.warning("Stabilisation already in progress")
+          case StabilisationAlgorithmFinished =>
+            stabilisationAlgorithmRef ! StabilisationAlgorithmReset(NodeInfo(nodeId, self),
+                                                                    nodeRef,
+                                                                    externalRequestTimeout)
+          case StabilisationAlgorithmError(message) =>
+            log.error("Stabilisation failed: {}", message)
+            stabilisationAlgorithmRef ! StabilisationAlgorithmReset(NodeInfo(nodeId, self),
+                                                                    nodeRef,
+                                                                    externalRequestTimeout)
+        }
+        .recover {
+          case exception =>
+            log.error("Stabilisation recovery failed: {}", exception.getMessage)
+            stabilisationAlgorithmRef ! StabilisationAlgorithmReset(NodeInfo(nodeId, self),
+                                                                    nodeRef,
+                                                                    externalRequestTimeout)
+        }
+    }
 
   def receiveWhileReady(nodeRef: ActorRef,
                         checkPredecessorAlgorithm: ActorRef,
-                        stabilisationAlgorithm: ActorRef): Receive = {
+                        stabilisationAlgorithm: ActorRef,
+                        stabilisationCancellable: Cancellable): Receive = {
     case CheckPredecessor =>
       checkPredecessor(nodeRef, checkPredecessorAlgorithm, sender())
 
@@ -236,32 +245,42 @@ final class Node(nodeId: Long,
       fixFingers(sender())
 
     case Join(seedId, seedRef) =>
+      stabilisationCancellable.cancel()
+
       context.stop(nodeRef)
       context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
+
       val newPointersRef = newPointers(nodeId, seedId, seedRef)
+      val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
+      val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef, newPointersRef)
+
       context.become(
         receiveWhileReady(
           newPointersRef,
           newCheckPredecessorAlgorithm(newPointersRef),
-          newStabilisationAlgorithm(newPointersRef)
+          newStabilisationAlgorithmRef,
+          newStabilisationCancellable
         )
       )
+
       sender() ! JoinOk
 
     case Notify(candidateId, candidateRef) =>
       notify(nodeRef, NodeInfo(candidateId, candidateRef), sender())
-
-    case Stabilise =>
-      stabilise(nodeRef, stabilisationAlgorithm, sender())
   }
 
   override def receive: Receive = {
     val newPointersRef = newPointers(nodeId, nodeId, self)
+    val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
+    val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
+    val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef, newPointersRef)
+
     receiveWhileReady(
       newPointersRef,
-      newCheckPredecessorAlgorithm(newPointersRef),
-      newStabilisationAlgorithm(newPointersRef)
+      newCheckPredecessorAlgorithmRef,
+      newStabilisationAlgorithmRef,
+      newStabilisationCancellable
     )
   }
 }
@@ -333,16 +352,6 @@ object Node {
   case object NotifyIgnored extends NotifyResponse
 
   final case class NotifyError(message: String) extends NotifyResponse
-
-  case object Stabilise extends Request
-
-  sealed trait StabiliseResponse extends Response
-
-  case object StabiliseInProgress extends StabiliseResponse
-
-  case object StabiliseOk extends StabiliseResponse
-
-  final case class StabiliseError(message: String) extends StabiliseResponse
 
   def props(nodeId: Long,
             keyspaceBits: Int,
