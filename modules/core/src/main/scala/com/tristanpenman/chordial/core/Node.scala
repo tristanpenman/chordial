@@ -41,8 +41,6 @@ final class Node(nodeId: Long,
   require(nodeId >= 0, "ownId must be a non-negative Long value")
   require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
 
-  println(akka.serialization.Serialization.serializedActorPath(self))
-
   private def newPointers(nodeId: Long, seedId: Long, seedRef: ActorRef) =
     context.actorOf(
       Pointers
@@ -238,22 +236,6 @@ final class Node(nodeId: Long,
     case FindSuccessor(queryId) =>
       findSuccessor(queryId, sender())
 
-    case GetSeedId(path) =>
-      val selection = context.actorSelection(path)
-      log.info("Actor selection: {}", selection.toString())
-      selection
-        .ask(GetId)(algorithmTimeout)
-        .mapTo[GetIdResponse]
-        .map {
-          case GetIdOk(id) =>
-            GetSeedIdOk(id)
-        }
-        .recover {
-          case exception =>
-            GetSeedIdError(exception.getMessage)
-        }
-        .pipeTo(sender())
-
     case Join(seedId, seedRef) =>
       checkPredecessorCancellable.cancel()
       stabilisationCancellable.cancel()
@@ -334,14 +316,6 @@ object Node {
   final case class FindSuccessorOk(queryId: Long, successor: NodeInfo) extends FindSuccessorResponse
 
   final case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
-
-  final case class GetSeedId(path: String) extends Request
-
-  sealed trait GetSeedIdResponse extends Response
-
-  final case class GetSeedIdOk(seedId: Long) extends GetSeedIdResponse
-
-  final case class GetSeedIdError(message: String) extends GetSeedIdResponse
 
   final case class Join(seedId: Long, seedRef: ActorRef) extends Request
 

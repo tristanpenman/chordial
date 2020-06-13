@@ -2,7 +2,8 @@ package com.tristanpenman.chordial.dht
 
 import java.util.Properties
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.server.Directives.{get, handleWebSocketMessages, path}
@@ -12,7 +13,7 @@ import akka.stream.scaladsl.Flow
 import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives.cors
 import com.tristanpenman.chordial.core.Node
-import com.tristanpenman.chordial.core.Node._
+import com.tristanpenman.chordial.core.Pointers.{GetId, GetIdOk, GetIdResponse}
 import com.typesafe.config.ConfigFactory
 import spray.json.DefaultJsonProtocol
 
@@ -53,7 +54,6 @@ object Dht extends App with DefaultJsonProtocol {
 
   // Parse command line arguments
   val options = consumeOptions(Map(), args.toList)
-  println(options)
 
   // Number of virtual nodes
   val virtualNodes = options.get(Symbol("virtual-nodes")) match {
@@ -84,6 +84,8 @@ object Dht extends App with DefaultJsonProtocol {
   implicit val mat = ActorMaterializer()
   implicit val ec = system.dispatcher
 
+  val log = Logging.getLogger(system, this)
+
   private val keyspaceBits = 6
 
   private val idModulus = 1 << keyspaceBits
@@ -96,26 +98,41 @@ object Dht extends App with DefaultJsonProtocol {
   // How long to wait when making requests that may be routed to other nodes
   private val externalRequestTimeout = Timeout(500.milliseconds)
 
+  val firstNodeId = Random.nextLong(idModulus)
   val firstNode = system.actorOf(
-    Node.props(Random.nextInt(idModulus), keyspaceBits, algorithmTimeout, externalRequestTimeout, system.eventStream))
+    Node.props(firstNodeId, keyspaceBits, algorithmTimeout, externalRequestTimeout, system.eventStream),
+    s"node:${firstNodeId}"
+  )
 
-  options.get(Symbol("seed-node")) match {
-    case Some(x: String) =>
-      firstNode
-        .ask(GetSeedId(x))(algorithmTimeout)
-        .mapTo[GetSeedIdResponse]
-        .map {
-          case GetSeedIdOk(id) =>
-            println(id)
-          case GetSeedIdError(message) =>
-            println(message)
-        }
-        .recover {
-          case exception =>
-            println(exception.getMessage)
-        }
+  // Print out the public path for the first node
+  val publicAddress = system.asInstanceOf[ExtendedActorSystem].provider.getDefaultAddress
+  log.info(s"Public address: ${firstNode.path.toStringWithAddress(publicAddress)}")
+
+  // Block on receipt of ID of first/seed node
+  val (seedId, seedRef) = options.get(Symbol("seed-node")) match {
+    case Some(path: String) =>
+      val seedRef = system.actorSelection(path)
+      val seedId = Await.result(
+        seedRef
+          .ask(GetId)(algorithmTimeout)
+          .mapTo[GetIdResponse]
+          .map {
+            case GetIdOk(id) =>
+              id
+          }
+          .recover {
+            case exception =>
+              throw new Exception(s"Failed to get seed ID: ${exception.getMessage}")
+          },
+        algorithmTimeout.duration
+      )
+      (seedId, seedRef)
     case _ =>
+      (firstNodeId, firstNode)
   }
+
+  log.info(s"Seed ID: ${seedId}")
+  log.info(s"Seed ref: ${seedRef}")
 
   val dhtService: Flow[Message, Message, _] = Flow[Message].map {
     case TextMessage.Strict(txt) => TextMessage("ECHO: " + txt)
