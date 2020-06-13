@@ -28,8 +28,8 @@ lazy val commonSettings = Seq(
   javaOptions in Test ++= Seq("-Xmx256m")
 )
 
-lazy val akkaVersion = "2.5.26"
-lazy val akkaHttpVersion = "10.1.11"
+lazy val akkaVersion = "2.5.31"
+lazy val akkaHttpVersion = "10.1.12"
 lazy val scalatestVersion = "3.0.8"
 
 lazy val core = project
