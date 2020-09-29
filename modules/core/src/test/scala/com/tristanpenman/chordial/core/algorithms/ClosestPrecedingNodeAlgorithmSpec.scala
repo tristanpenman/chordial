@@ -63,16 +63,14 @@ final class ClosestPrecedingNodeAlgorithmSpec
 
       testCases.foreach { input =>
         "return a pointer for Node with ID 1 when queried for ID " + input in {
-          val algorithm =
-            newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
+          val algorithm = newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
           algorithm ! ClosestPrecedingNodeAlgorithmStart(input)
           expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(1L, dummyActorRef)))
         }
       }
 
       "finish without sending any further messages" in {
-        val algorithm =
-          newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
+        val algorithm = newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
         expectNoMessage(spuriousMessageDuration)
@@ -103,8 +101,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
       }
 
       "not send any additional messages after finishing" in {
-        val algorithm =
-          newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
+        val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
         expectNoMessage(spuriousMessageDuration)
@@ -122,8 +119,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
           }
         })
 
-      val testCases =
-        SortedMap(0L -> 3L, 1L -> 3L, 2L -> 1L, 3L -> 1L, 4L -> 3L)
+      val testCases = SortedMap(0L -> 3L, 1L -> 3L, 2L -> 1L, 3L -> 1L, 4L -> 3L)
 
       testCases.foreach {
         case (input, output) =>
@@ -135,8 +131,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
       }
 
       "not send any additional messages after finishing" in {
-        val algorithm =
-          newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
+        val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
         expectNoMessage(spuriousMessageDuration)
