@@ -174,15 +174,13 @@ final class Node(nodeId: Long,
           case CheckPredecessorAlgorithmAlreadyRunning =>
             log.warning("CheckPredecessor already in progress")
           case CheckPredecessorAlgorithmFinished =>
-            checkPredecessorAlgorithmRef ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
+            log.debug("CheckPredecessor finished")
           case CheckPredecessorAlgorithmError(message) =>
             log.error("CheckPredecessor failed: {}", message)
-            checkPredecessorAlgorithmRef ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
         }
         .recover {
           case exception =>
             log.error("CheckPredecessor recovery failed: {}", exception.getMessage)
-            checkPredecessorAlgorithmRef ! CheckPredecessorAlgorithmReset(nodeRef, externalRequestTimeout)
         }
     }
 
