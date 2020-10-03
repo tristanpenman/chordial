@@ -2,7 +2,7 @@ package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, ReceiveTimeout}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk}
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessor, GetSuccessorOk}
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 import scala.concurrent.duration.Duration
@@ -33,11 +33,11 @@ final class ClosestPrecedingNodeAlgorithm(node: NodeInfo, pointersRef: ActorRef,
     case ClosestPrecedingNodeAlgorithmStart(_) =>
       sender() ! ClosestPrecedingNodeAlgorithmAlreadyRunning
 
-    case GetSuccessorListOk(primarySuccessor, _) =>
+    case GetSuccessorOk(successor) =>
       context.setReceiveTimeout(Duration.Undefined)
       context.become(receive)
       replyTo ! ClosestPrecedingNodeAlgorithmFinished(
-        if (Interval(node.id + 1, queryId).contains(primarySuccessor.id)) primarySuccessor else node)
+        if (Interval(node.id + 1, queryId).contains(successor.id)) successor else node)
 
     case ReceiveTimeout =>
       context.setReceiveTimeout(Duration.Undefined)
@@ -49,7 +49,7 @@ final class ClosestPrecedingNodeAlgorithm(node: NodeInfo, pointersRef: ActorRef,
     case ClosestPrecedingNodeAlgorithmStart(queryId: Long) =>
       context.become(running(queryId, sender()))
       context.setReceiveTimeout(extTimeout.duration)
-      pointersRef ! GetSuccessorList
+      pointersRef ! GetSuccessor
 
     case ReceiveTimeout =>
       // timeout from an earlier request that was completed before the timeout message was processed

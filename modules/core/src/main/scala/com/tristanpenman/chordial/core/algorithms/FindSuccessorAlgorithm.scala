@@ -23,9 +23,9 @@ final class FindSuccessorAlgorithm extends Actor with ActorLogging {
 
   import FindSuccessorAlgorithm._
 
-  def awaitGetSuccessorList(delegate: ActorRef): Receive = {
-    case GetSuccessorListOk(primarySuccessor, _) =>
-      delegate ! FindSuccessorAlgorithmOk(primarySuccessor)
+  def awaitGetSuccessor(delegate: ActorRef): Receive = {
+    case GetSuccessorOk(successor) =>
+      delegate ! FindSuccessorAlgorithmOk(successor)
       context.stop(self)
 
     case FindSuccessorAlgorithmStart(_, _) =>
@@ -37,8 +37,8 @@ final class FindSuccessorAlgorithm extends Actor with ActorLogging {
 
   def awaitFindPredecessor(delegate: ActorRef): Receive = {
     case FindPredecessorOk(_, predecessor) =>
-      predecessor.ref ! GetSuccessorList
-      context.become(awaitGetSuccessorList(delegate))
+      predecessor.ref ! GetSuccessor
+      context.become(awaitGetSuccessor(delegate))
 
     case FindPredecessorError(_, message) =>
       delegate ! FindSuccessorAlgorithmError(message)

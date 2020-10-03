@@ -61,8 +61,8 @@ final class CheckPredecessorAlgorithmSpec
       def newPointersActor: ActorRef = {
         val healthyPredecessor = TestActorRef(new Actor {
           override def receive: Receive = {
-            case GetSuccessorList =>
-              sender() ! GetSuccessorListOk(NodeInfo(1L, self), List.empty)
+            case GetSuccessor =>
+              sender() ! GetSuccessorOk(NodeInfo(1L, self))
           }
         })
 

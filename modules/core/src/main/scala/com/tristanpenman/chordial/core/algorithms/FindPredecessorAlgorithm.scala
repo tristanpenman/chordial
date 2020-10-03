@@ -27,10 +27,10 @@ final class FindPredecessorAlgorithm extends Actor with ActorLogging {
 
   import FindPredecessorAlgorithm._
 
-  def awaitGetSuccessorList(queryId: Long, delegate: ActorRef, candidate: NodeInfo): Actor.Receive = {
-    case GetSuccessorListOk(primarySuccessor: NodeInfo, _) =>
+  def awaitGetSuccessor(queryId: Long, delegate: ActorRef, candidate: NodeInfo): Actor.Receive = {
+    case GetSuccessorOk(successor: NodeInfo) =>
       // Check whether the query ID belongs to the candidate node's successor
-      if (Interval(candidate.id + 1, primarySuccessor.id + 1)
+      if (Interval(candidate.id + 1, successor.id + 1)
             .contains(queryId)) {
         // If the query ID belongs to the candidate node's successor, then we have successfully found the predecessor
         delegate ! FindPredecessorAlgorithmOk(candidate)
@@ -53,8 +53,8 @@ final class FindPredecessorAlgorithm extends Actor with ActorLogging {
     case ClosestPrecedingNodeOk(candidate) =>
       // Now that we have the ID and ActorRef for the next candidate node, we can proceed to the next step of the
       // algorithm. This requires that we locate the successor of the candidate node.
-      candidate.ref ! GetSuccessorList
-      context.become(awaitGetSuccessorList(queryId, delegate, candidate))
+      candidate.ref ! GetSuccessor
+      context.become(awaitGetSuccessor(queryId, delegate, candidate))
 
     case ClosestPrecedingNodeError(message: String) =>
       delegate ! FindPredecessorAlgorithmError(s"ClosestPrecedingFinder request failed with message: $message")
@@ -69,8 +69,8 @@ final class FindPredecessorAlgorithm extends Actor with ActorLogging {
 
   override def receive: Receive = {
     case FindPredecessorAlgorithmStart(queryId: Long, initialNode: NodeInfo) =>
-      initialNode.ref ! GetSuccessorList
-      context.become(awaitGetSuccessorList(queryId, sender(), initialNode))
+      initialNode.ref ! GetSuccessor
+      context.become(awaitGetSuccessor(queryId, sender(), initialNode))
 
     case message =>
       log.warning("Received unexpected message while waiting for FindPredecessorAlgorithmStart: {}", message)

@@ -42,7 +42,7 @@ final class CheckPredecessorAlgorithm(pointersRef: ActorRef, requestTimeout: Tim
       replyTo ! CheckPredecessorAlgorithmFinished
   }
 
-  private def awaitGetSuccessorList(replyTo: ActorRef): Receive = {
+  private def awaitGetSuccessor(replyTo: ActorRef): Receive = {
     case CheckPredecessorAlgorithmStart =>
       sender() ! CheckPredecessorAlgorithmAlreadyRunning
 
@@ -62,8 +62,8 @@ final class CheckPredecessorAlgorithm(pointersRef: ActorRef, requestTimeout: Tim
       sender() ! CheckPredecessorAlgorithmAlreadyRunning
 
     case GetPredecessorOk(predecessor) =>
-      context.become(awaitGetSuccessorList(replyTo))
-      predecessor.ref ! GetSuccessorList
+      context.become(awaitGetSuccessor(replyTo))
+      predecessor.ref ! GetSuccessor
 
     case GetPredecessorOkButUnknown =>
       context.become(receive)

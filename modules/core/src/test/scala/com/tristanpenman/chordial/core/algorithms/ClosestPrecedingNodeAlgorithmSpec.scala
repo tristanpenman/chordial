@@ -3,7 +3,7 @@ package com.tristanpenman.chordial.core.algorithms
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk}
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessor, GetSuccessorOk}
 import com.tristanpenman.chordial.core.algorithms.ClosestPrecedingNodeAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
@@ -51,8 +51,8 @@ final class ClosestPrecedingNodeAlgorithmSpec
           }
 
           override def receive: Receive = {
-            case GetSuccessorList =>
-              sender() ! GetSuccessorListOk(NodeInfo(1L, dummyActorRef), List.empty)
+            case GetSuccessor =>
+              sender() ! GetSuccessorOk(NodeInfo(1L, dummyActorRef))
               context.become(failOnReceive)
             case m =>
               fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
@@ -83,8 +83,8 @@ final class ClosestPrecedingNodeAlgorithmSpec
       def newPointersActor: ActorRef =
         TestActorRef(new Actor {
           override def receive: Receive = {
-            case GetSuccessorList =>
-              sender() ! GetSuccessorListOk(NodeInfo(successorId, dummyActorRef), List.empty)
+            case GetSuccessor =>
+              sender() ! GetSuccessorOk(NodeInfo(successorId, dummyActorRef))
           }
         })
 
@@ -114,8 +114,8 @@ final class ClosestPrecedingNodeAlgorithmSpec
       def newPointersActor: ActorRef =
         TestActorRef(new Actor {
           override def receive: Receive = {
-            case GetSuccessorList =>
-              sender() ! GetSuccessorListOk(NodeInfo(successorId, dummyActorRef), List.empty)
+            case GetSuccessor =>
+              sender() ! GetSuccessorOk(NodeInfo(successorId, dummyActorRef))
           }
         })
 

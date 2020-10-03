@@ -1,7 +1,7 @@
 package com.tristanpenman.chordial.demo
 
 import akka.actor.{Actor, ActorLogging, Props}
-import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorListUpdated}
+import com.tristanpenman.chordial.core.Event.{NodeCreated, PredecessorReset, PredecessorUpdated, SuccessorUpdated}
 
 final class EventWriter extends Actor with ActorLogging {
 
@@ -12,8 +12,8 @@ final class EventWriter extends Actor with ActorLogging {
       log.info(s"""Predecessor reset: { "nodeId": $nodeId }""")
     case PredecessorUpdated(nodeId, predecessorId) =>
       log.info(s"""Predecessor updated: { "nodeId": $nodeId, "predecessorId": $predecessorId }""")
-    case SuccessorListUpdated(nodeId, primarySuccessorId, _) =>
-      log.info(s"""Successor updated: { "nodeId": $nodeId, "successorId": $primarySuccessorId }""")
+    case SuccessorUpdated(nodeId, successorId) =>
+      log.info(s"""Successor updated: { "nodeId": $nodeId, "successorId": $successorId }""")
   }
 
 }

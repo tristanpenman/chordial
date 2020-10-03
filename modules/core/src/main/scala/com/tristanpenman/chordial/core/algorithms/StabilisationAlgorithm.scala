@@ -1,15 +1,14 @@
 package com.tristanpenman.chordial.core.algorithms
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.pattern.{ask, AskTimeoutException}
+import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 
 /**
   * Actor class that implements the Stabilise algorithm
@@ -56,56 +55,6 @@ final class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: Ac
   import StabilisationAlgorithm._
 
   /**
-    * Use the 'Ask' pattern to send a message to the current successor
-    *
-    * If the successor fails to respond in time, it is assumed to have failed. This function will send a message to the
-    * Pointers actor, telling it to remove the failing node from the successor list, replacing it with the first of the
-    * backup successors. If there are no backup successors, then an exception will be thrown.
-    */
-  private def askSuccessor(pointersRef: ActorRef,
-                           msg: Any,
-                           requestTimeout: Timeout): Future[(Any, NodeInfo, Set[Long])] = {
-    // Helper function to tell the Pointers actor to discard the primary successor
-    def switchToNextSuccessor(backupSuccessors: List[NodeInfo]): Unit = {
-      if (backupSuccessors.isEmpty) {
-        // If there are no backup successors left, throw an exception
-        throw new RuntimeException("No backup successors")
-      }
-
-      // Ask node to remove successor from successor list
-      val newSuccessor = backupSuccessors.head
-      val newBackupSuccessors = backupSuccessors.tail
-      Await.ready(
-        pointersRef
-          .ask(UpdateSuccessorList(newSuccessor, newBackupSuccessors))(requestTimeout)
-          .mapTo[UpdateSuccessorListOk.type],
-        Duration.Inf
-      )
-    }
-
-    // Helper function to forward a message to the current successor
-    def forwardMessage(primarySuccessor: NodeInfo,
-                       backupSuccessors: List[NodeInfo],
-                       failedNodeIds: Set[Long]): Future[(Any, NodeInfo, Set[Long])] =
-      primarySuccessor.ref
-        .ask(msg)(requestTimeout)
-        .map(m => (m, primarySuccessor, failedNodeIds))
-        .recoverWith {
-          case _: AskTimeoutException =>
-            switchToNextSuccessor(backupSuccessors)
-            forwardMessage(backupSuccessors.head, backupSuccessors.tail, failedNodeIds + primarySuccessor.id)
-        }
-
-    pointersRef
-      .ask(GetSuccessorList)(requestTimeout)
-      .mapTo[GetSuccessorListResponse]
-      .flatMap {
-        case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
-          forwardMessage(primarySuccessor, backupSuccessors, Set.empty)
-      }
-  }
-
-  /**
     * Execute the 'stabilisation' algorithm asynchronously
     *
     * @param node current node
@@ -115,50 +64,34 @@ final class StabilisationAlgorithm(initialNode: NodeInfo, initialPointersRef: Ac
     * @return a \c Future that will complete once the updated successor has been notified of the current node
     */
   private def runAsync(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Future[Unit] =
-    // Step 1:  Get the predecessor of the current node's first live successor
-    askSuccessor(pointersRef, GetPredecessor, requestTimeout)
-      .mapTo[(GetPredecessorResponse, NodeInfo, Set[Long])]
-      .map {
-        case (GetPredecessorOk(candidate), currentSuccessor, failedNodeIds)
-            if Interval(node.id + 1, currentSuccessor.id).contains(candidate.id) &&
-              !failedNodeIds.contains(candidate.id) =>
-          (candidate, failedNodeIds)
-        case (GetPredecessorOk(_), currentSuccessor, failedNodeIds) =>
-          (currentSuccessor, failedNodeIds)
-        case (GetPredecessorOkButUnknown, currentSuccessor, failedNodeIds) =>
-          (currentSuccessor, failedNodeIds)
-      }
-
-      // Step 2:  Reconcile successor list of closest node with that of the current node, removing failed nodes
+    pointersRef
+      .ask(GetSuccessor)(requestTimeout)
+      .mapTo[GetSuccessorResponse]
       .flatMap {
-        case (closestSuccessor, failedNodeIds) =>
-          if (closestSuccessor.id == node.id) {
-            // No need to reconcile if the node is its own successor
-            Future { closestSuccessor }
-          } else {
-            closestSuccessor.ref
-              .ask(GetSuccessorList)(requestTimeout)
-              .mapTo[GetSuccessorListResponse]
-              .map {
-                case GetSuccessorListOk(primarySuccessor, backupSuccessors) =>
-                  primarySuccessor :: backupSuccessors.dropRight(1)
-              }
-              .flatMap { backupSuccessors =>
-                val backupSuccessorsWithoutFailedNodes =
-                  backupSuccessors.filterNot { nodeInfo =>
-                    failedNodeIds.contains(nodeInfo.id)
-                  }
-                pointersRef
-                  .ask(UpdateSuccessorList(closestSuccessor, backupSuccessorsWithoutFailedNodes))(requestTimeout)
-                  .mapTo[UpdateSuccessorListResponse]
-                  .map {
-                    case UpdateSuccessorListOk => closestSuccessor
-                  }
-              }
+        case GetSuccessorOk(successor) =>
+          successor.ref
+            .ask(GetPredecessor)(requestTimeout)
+            .map(m => (m, successor))
+      }
+      .mapTo[(GetPredecessorResponse, NodeInfo)]
+      .map {
+        case (GetPredecessorOk(candidate), currentSuccessor)
+            if Interval(node.id + 1, currentSuccessor.id).contains(candidate.id) =>
+          candidate
+        case (GetPredecessorOk(_), currentSuccessor) =>
+          currentSuccessor
+        case (GetPredecessorOkButUnknown, currentSuccessor) =>
+          currentSuccessor
+      }
+      .flatMap { newSuccessor =>
+        pointersRef
+          .ask(UpdateSuccessor(newSuccessor))(requestTimeout)
+          .mapTo[UpdateSuccessorResponse]
+          .map {
+            case UpdateSuccessorOk =>
+              newSuccessor
           }
       }
-
-      // Step 3:  Notify the new successor that this node presumes to be its predecessor
       .flatMap { newSuccessor =>
         newSuccessor.ref
           .ask(Notify(node.id, node.ref))(requestTimeout)

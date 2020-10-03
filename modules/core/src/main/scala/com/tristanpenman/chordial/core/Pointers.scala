@@ -15,8 +15,7 @@ final class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eve
     None
   }
 
-  private def receiveWhileReady(primarySuccessor: NodeInfo,
-                                backupSuccessors: List[NodeInfo],
+  private def receiveWhileReady(successor: NodeInfo,
                                 predecessor: Option[NodeInfo],
                                 fingerTable: Vector[Option[NodeInfo]]): Receive = {
     case GetId =>
@@ -30,22 +29,20 @@ final class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eve
           sender() ! GetPredecessorOkButUnknown
       }
 
-    case GetSuccessorList =>
-      sender() ! GetSuccessorListOk(primarySuccessor, backupSuccessors)
+    case GetSuccessor =>
+      sender() ! GetSuccessorOk(successor)
 
     case ResetFinger(index: Int) =>
       if (index < 0 || index >= fingerTableSize) {
         sender() ! ResetFingerInvalidIndex
       } else {
-        context.become(
-          receiveWhileReady(primarySuccessor, backupSuccessors, predecessor, fingerTable.updated(index, None))
-        )
+        context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index, None)))
         sender() ! ResetFingerOk
         eventStream.publish(FingerReset(nodeId, index))
       }
 
     case ResetPredecessor =>
-      context.become(receiveWhileReady(primarySuccessor, backupSuccessors, None, fingerTable))
+      context.become(receiveWhileReady(successor, None, fingerTable))
       sender() ! ResetPredecessorOk
       eventStream.publish(PredecessorReset(nodeId))
 
@@ -53,32 +50,30 @@ final class Pointers(nodeId: Long, fingerTableSize: Int, seedNode: NodeInfo, eve
       if (index < 0 || index >= fingerTableSize) {
         sender() ! UpdateFingerInvalidIndex
       } else {
-        context.become(
-          receiveWhileReady(primarySuccessor, backupSuccessors, predecessor, fingerTable.updated(index, Some(finger)))
-        )
+        context.become(receiveWhileReady(successor, predecessor, fingerTable.updated(index, Some(finger))))
         sender() ! UpdateFingerOk
         eventStream.publish(FingerUpdated(nodeId, index, finger.id))
       }
 
     case UpdatePredecessor(newPredecessor) =>
-      context.become(receiveWhileReady(primarySuccessor, backupSuccessors, Some(newPredecessor), fingerTable))
+      context.become(receiveWhileReady(successor, Some(newPredecessor), fingerTable))
       sender() ! UpdatePredecessorOk
       eventStream.publish(PredecessorUpdated(nodeId, newPredecessor.id))
 
-    case UpdateSuccessorList(newPrimarySuccessor, newBackupSuccessors) =>
-      if (newPrimarySuccessor != primarySuccessor || newBackupSuccessors != backupSuccessors) {
-        context.become(receiveWhileReady(newPrimarySuccessor, newBackupSuccessors, predecessor, fingerTable))
-        sender() ! UpdateSuccessorListOk
-        eventStream.publish(SuccessorListUpdated(nodeId, newPrimarySuccessor.id, newBackupSuccessors.map(_.id)))
+    case UpdateSuccessor(newSuccessor) =>
+      if (newSuccessor != successor) {
+        context.become(receiveWhileReady(newSuccessor, predecessor, fingerTable))
+        sender() ! UpdateSuccessorOk
+        eventStream.publish(SuccessorUpdated(nodeId, newSuccessor.id))
       } else {
-        sender() ! UpdateSuccessorListOk
+        sender() ! UpdateSuccessorOk
       }
   }
 
   eventStream.publish(NodeCreated(nodeId, seedNode.id))
 
   override def receive: Receive =
-    receiveWhileReady(seedNode, List.empty, None, newFingerTable)
+    receiveWhileReady(seedNode, None, newFingerTable)
 }
 
 object Pointers {
@@ -101,12 +96,11 @@ object Pointers {
 
   case object GetPredecessorOkButUnknown extends GetPredecessorResponse
 
-  sealed trait GetSuccessorListResponse extends Response
+  sealed trait GetSuccessorResponse extends Response
 
-  case object GetSuccessorList extends Request
+  case object GetSuccessor extends Request
 
-  final case class GetSuccessorListOk(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo])
-      extends GetSuccessorListResponse
+  final case class GetSuccessorOk(successor: NodeInfo) extends GetSuccessorResponse
 
   case object ResetPredecessor extends Request
 
@@ -136,11 +130,11 @@ object Pointers {
 
   case object UpdatePredecessorOk extends UpdatePredecessorResponse
 
-  final case class UpdateSuccessorList(primarySuccessor: NodeInfo, backupSuccessors: List[NodeInfo]) extends Request
+  final case class UpdateSuccessor(successor: NodeInfo) extends Request
 
-  sealed trait UpdateSuccessorListResponse extends Response
+  sealed trait UpdateSuccessorResponse extends Response
 
-  case object UpdateSuccessorListOk extends UpdateSuccessorListResponse
+  case object UpdateSuccessorOk extends UpdateSuccessorResponse
 
   def props(ownId: Long, keyspaceBits: Int, seed: NodeInfo, eventStream: EventStream): Props =
     Props(new Pointers(ownId, keyspaceBits, seed, eventStream))

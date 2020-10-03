@@ -165,7 +165,7 @@ final class Node(nodeId: Long,
       .pipeTo(replyTo)
   }
 
-  private def scheduleCheckPredecessor(nodeRef: ActorRef, checkPredecessorAlgorithmRef: ActorRef) =
+  private def scheduleCheckPredecessor(checkPredecessorAlgorithmRef: ActorRef) =
     context.system.scheduler.schedule(300.milliseconds, 300.milliseconds) {
       checkPredecessorAlgorithmRef
         .ask(CheckPredecessorAlgorithmStart)(checkPredecessorTimeout)
@@ -225,7 +225,7 @@ final class Node(nodeId: Long,
     case m @ GetPredecessor =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
-    case m @ GetSuccessorList =>
+    case m @ GetSuccessor =>
       nodeRef.ask(m)(externalRequestTimeout).pipeTo(sender())
 
     case FindPredecessor(queryId) =>
@@ -245,7 +245,7 @@ final class Node(nodeId: Long,
       val newPointersRef = newPointers(nodeId, seedId, seedRef)
 
       val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
-      val newCheckPredecessorCancellable = scheduleCheckPredecessor(newPointersRef, newCheckPredecessorAlgorithmRef)
+      val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
 
       val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
       val newStabilisationCancellable = scheduleStabilisation(newPointersRef, newStabilisationAlgorithmRef)
@@ -270,7 +270,7 @@ final class Node(nodeId: Long,
     val newPointersRef = newPointers(nodeId, nodeId, self)
 
     val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
-    val newCheckPredecessorCancellable = scheduleCheckPredecessor(newPointersRef, newCheckPredecessorAlgorithmRef)
+    val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
 
     val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
     val newStabilisationCancellable = scheduleStabilisation(newPointersRef, newStabilisationAlgorithmRef)

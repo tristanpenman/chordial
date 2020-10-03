@@ -50,8 +50,8 @@ object Demo extends App {
           s"""{ "type": "PredecessorReset", "nodeId": $nodeId }"""
         case PredecessorUpdated(nodeId, predecessorId) =>
           s"""{ "type": "PredecessorUpdated", "nodeId": $nodeId, "predecessorId": $predecessorId }"""
-        case SuccessorListUpdated(nodeId, primarySuccessorId, _) =>
-          s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $primarySuccessorId }"""
+        case SuccessorUpdated(nodeId, successorId) =>
+          s"""{ "type": "SuccessorUpdated", "nodeId": $nodeId, "successorId": $successorId }"""
       }
       .map(TextMessage(_))
       .withAttributes(ActorAttributes.supervisionStrategy(Supervision.resumingDecider))

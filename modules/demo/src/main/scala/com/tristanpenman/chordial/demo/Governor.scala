@@ -6,7 +6,7 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Event.NodeShuttingDown
 import com.tristanpenman.chordial.core.Node
 import com.tristanpenman.chordial.core.Node._
-import com.tristanpenman.chordial.core.Pointers.{GetSuccessorList, GetSuccessorListOk, GetSuccessorListResponse}
+import com.tristanpenman.chordial.core.Pointers.{GetSuccessor, GetSuccessorOk, GetSuccessorResponse}
 
 import scala.annotation.tailrec
 import scala.concurrent.Await
@@ -119,11 +119,11 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
           nodeRef
-            .ask(GetSuccessorList)(getSuccessorRequestTimeout)
-            .mapTo[GetSuccessorListResponse]
+            .ask(GetSuccessor)(getSuccessorRequestTimeout)
+            .mapTo[GetSuccessorResponse]
             .map {
-              case GetSuccessorListOk(primarySuccessor, _) =>
-                GetNodeSuccessorIdOk(primarySuccessor.id)
+              case GetSuccessorOk(successor) =>
+                GetNodeSuccessorIdOk(successor.id)
             }
             .recover {
               case ex => GetNodeSuccessorIdError(ex.getMessage)
