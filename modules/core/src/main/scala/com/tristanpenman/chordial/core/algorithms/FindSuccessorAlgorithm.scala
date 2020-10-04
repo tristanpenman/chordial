@@ -52,8 +52,8 @@ final class FindSuccessorAlgorithm extends Actor with ActorLogging {
   }
 
   override def receive: Receive = {
-    case FindSuccessorAlgorithmStart(queryId: Long, initialNodeRef: ActorRef) =>
-      initialNodeRef ! FindPredecessor(queryId)
+    case FindSuccessorAlgorithmStart(queryId: Long, node: ActorRef) =>
+      node ! FindPredecessor(queryId)
       context.become(awaitFindPredecessor(sender()))
 
     case message =>

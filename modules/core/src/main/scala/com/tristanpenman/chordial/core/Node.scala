@@ -184,7 +184,7 @@ final class Node(nodeId: Long,
         }
     }
 
-  private def scheduleStabilisation(nodeRef: ActorRef, stabilisationAlgorithmRef: ActorRef) =
+  private def scheduleStabilisation(stabilisationAlgorithmRef: ActorRef) =
     context.system.scheduler.schedule(200.milliseconds, 200.milliseconds) {
       stabilisationAlgorithmRef
         .ask(StabilisationAlgorithmStart)(stabiliseTimeout)
@@ -193,21 +193,13 @@ final class Node(nodeId: Long,
           case StabilisationAlgorithmAlreadyRunning =>
             log.warning("Stabilisation already in progress")
           case StabilisationAlgorithmFinished =>
-            stabilisationAlgorithmRef ! StabilisationAlgorithmReset(NodeInfo(nodeId, self),
-                                                                    nodeRef,
-                                                                    externalRequestTimeout)
+            log.info("Stabilisation algorithm finished")
           case StabilisationAlgorithmError(message) =>
             log.error("Stabilisation failed: {}", message)
-            stabilisationAlgorithmRef ! StabilisationAlgorithmReset(NodeInfo(nodeId, self),
-                                                                    nodeRef,
-                                                                    externalRequestTimeout)
         }
         .recover {
           case exception =>
             log.error("Stabilisation recovery failed: {}", exception.getMessage)
-            stabilisationAlgorithmRef ! StabilisationAlgorithmReset(NodeInfo(nodeId, self),
-                                                                    nodeRef,
-                                                                    externalRequestTimeout)
         }
     }
 
@@ -248,7 +240,7 @@ final class Node(nodeId: Long,
       val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
 
       val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
-      val newStabilisationCancellable = scheduleStabilisation(newPointersRef, newStabilisationAlgorithmRef)
+      val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef)
 
       context.become(
         receiveWhileReady(
@@ -273,7 +265,7 @@ final class Node(nodeId: Long,
     val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
 
     val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
-    val newStabilisationCancellable = scheduleStabilisation(newPointersRef, newStabilisationAlgorithmRef)
+    val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef)
 
     receiveWhileReady(
       newPointersRef,

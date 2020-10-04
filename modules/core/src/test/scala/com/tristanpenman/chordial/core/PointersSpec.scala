@@ -46,8 +46,7 @@ final class PointersSpec
         expectMsg(GetPredecessorOkButUnknown)
       }
 
-      "respond to a GetSuccessor message with a GetSuccessorOk message containing its successor's ID and " +
-        "an empty backup successor list" in {
+      "respond to a GetSuccessor message with a GetSuccessorOk message containing its successor's ID" in {
         newPointersActor ! GetSuccessor
         expectMsg(GetSuccessorOk(NodeInfo(seedId, dummyActorRef)))
       }
