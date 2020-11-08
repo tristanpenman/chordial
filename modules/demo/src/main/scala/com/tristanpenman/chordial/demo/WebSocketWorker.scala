@@ -12,17 +12,15 @@ import scala.concurrent.ExecutionContext
 final class WebSocketWorker(governor: ActorRef, eventsSource: Source[TextMessage, _])(implicit val ec: ExecutionContext)
     extends WebService {
 
-  def route =
-    // scalafmt: { indentOperator = spray }
+  def route: Route =
     cors() {
       routes(governor) ~
-      pathPrefix("eventstream")(getFromResourceDirectory("webapp")) ~
-      handleWebSocketMessages(Flow[Message].take(0).prepend(eventsSource))
+        pathPrefix("eventstream")(getFromResourceDirectory("webapp")) ~
+        handleWebSocketMessages(Flow[Message].take(0).prepend(eventsSource))
     }
 }
 
 object WebSocketWorker {
-  def apply(nodeRef: ActorRef, eventsSource: Source[TextMessage, _])(
-      implicit ec: ExecutionContext): Route =
+  def apply(nodeRef: ActorRef, eventsSource: Source[TextMessage, _])(implicit ec: ExecutionContext): Route =
     new WebSocketWorker(nodeRef, eventsSource).route
 }

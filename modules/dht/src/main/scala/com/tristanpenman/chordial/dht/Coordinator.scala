@@ -7,6 +7,7 @@ import akka.io.{IO, Udp}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node
 
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -19,7 +20,7 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
 
   private val idModulus = 1 << keyspaceBits
 
-  implicit val ec = context.system.dispatcher
+  implicit val ec: ExecutionContextExecutor = context.system.dispatcher
 
   IO(Udp) ! Udp.Bind(self, new InetSocketAddress(nodeAddress, nodePort))
 
@@ -32,10 +33,10 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
   private val externalRequestTimeout = Timeout(500.milliseconds)
 
   // TODO: Research how to handle collisions...
-  val firstNodeId = Random.nextLong(idModulus)
-  val firstNode = system.actorOf(
+  val firstNodeId: Long = Random.nextLong(idModulus)
+  val firstNode: ActorRef = system.actorOf(
     Node.props(firstNodeId, keyspaceBits, algorithmTimeout, externalRequestTimeout, system.eventStream),
-    s"node:${firstNodeId}"
+    "node:" + firstNodeId
   )
 
   seedNode match {
@@ -45,15 +46,15 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
       log.info("not using a seed node")
   }
 
-  def receive = {
-    case Udp.Bound(local) =>
+  def receive: Receive = {
+    case Udp.Bound(_) =>
       context.become(ready(sender()))
   }
 
   def ready(socket: ActorRef): Receive = {
-    case Udp.Received(data, remote) =>
-    case Udp.Unbind                 => socket ! Udp.Unbind
-    case Udp.Unbound                => context.stop(self)
+    // case Udp.Received(data, remote) =>
+    case Udp.Unbind  => socket ! Udp.Unbind
+    case Udp.Unbound => context.stop(self)
   }
 }
 

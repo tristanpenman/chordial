@@ -92,7 +92,7 @@ object Dht extends App with DefaultJsonProtocol {
   // Set up an actor system for the DHT backend
   //
 
-  implicit val system = ActorSystem("Service")
+  implicit val system: ActorSystem = ActorSystem("Service")
 
   //
   // Start coordinator actor

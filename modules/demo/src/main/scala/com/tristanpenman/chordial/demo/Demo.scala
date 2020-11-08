@@ -9,13 +9,13 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Event
 import com.tristanpenman.chordial.core.Event._
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration._
 
 object Demo extends App {
-  implicit val system = ActorSystem("chordial-demo")
-  implicit val mat = ActorMaterializer()
-  implicit val ec = system.dispatcher
+  implicit val system: ActorSystem = ActorSystem("chordial-demo")
+  implicit val mat: ActorMaterializer = ActorMaterializer()
+  implicit val ec: ExecutionContextExecutor = system.dispatcher
 
   implicit val timeout: Timeout = 3.seconds
 
