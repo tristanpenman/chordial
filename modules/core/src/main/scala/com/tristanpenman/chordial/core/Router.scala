@@ -19,9 +19,10 @@ class Router(initialNodes: Map[Long, ActorRef]) extends Actor with ActorLogging 
 
   val serialization: Serialization = SerializationExtension(system)
 
-  IO(Udp) ! Udp.SimpleSender
-
   private def ready(nodes: Map[Long, ActorRef], udpSend: ActorRef): Receive = {
+    case Start(_, _) =>
+      sender() ! StartFailed("aready started")
+
     case Forward(id, addr, message) =>
       nodes.get(id) match {
         case Some(ref) =>
@@ -53,13 +54,29 @@ class Router(initialNodes: Map[Long, ActorRef]) extends Actor with ActorLogging 
       log.error("unexpected message")
   }
 
-  override def receive: Receive = {
-    case Udp.SimpleSenderReady =>
+  def starting(replyTo: ActorRef): Receive = {
+    case Start(_, _) =>
+      sender() ! StartFailed("already starting")
+
+    case Udp.Bound(_) =>
       context.become(ready(initialNodes, sender()))
+      replyTo ! StartOk()
       unstashAll()
-    case Udp.CommandFailed =>
-      log.error("bind failed")
+
+    case Udp.CommandFailed(_) =>
+      log.error("bind failed; committing seppuku")
       context.stop(self)
+
+    case m =>
+      log.debug("received unexpected message", m)
+      stash()
+  }
+
+  override def receive: Receive = {
+    case Start(nodeAddress, nodePort) =>
+      context.become(starting(sender()))
+      IO(Udp) ! Udp.Bind(self, new InetSocketAddress(nodeAddress, nodePort))
+
     case _ => stash()
   }
 }
@@ -71,17 +88,27 @@ object Router {
 
   final case class Register(id: Long, ref: ActorRef) extends RouterRequest
 
+  final case class Start(nodeAddress: String, nodePort: Int) extends RouterRequest
+
   final case class Unregister(id: Long) extends RouterRequest
 
-  sealed trait RouterResponse
+  sealed trait RegisterResponse
 
-  final case class RegisterFailed(id: Long, reason: String) extends RouterResponse
+  final case class RegisterFailed(id: Long, reason: String) extends RegisterResponse
 
-  final case class RegisterOk(id: Long) extends RouterResponse
+  final case class RegisterOk(id: Long) extends RegisterResponse
 
-  final case class UnregisterFailed(id: Long, reason: String) extends RouterResponse
+  sealed trait StartResponse
 
-  final case class UnregisterOk(id: Long) extends RouterResponse
+  final case class StartFailed(reason: String) extends StartResponse
+
+  final case class StartOk() extends StartResponse
+
+  sealed trait UnregisterResponse
+
+  final case class UnregisterFailed(id: Long, reason: String) extends UnregisterResponse
+
+  final case class UnregisterOk(id: Long) extends UnregisterResponse
 
   def props(initialNodes: Map[Long, ActorRef] = Map.empty): Props = Props(new Router(initialNodes))
 }

@@ -1,11 +1,9 @@
 package com.tristanpenman.chordial.dht
 
-import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.io.{IO, Udp}
 import akka.util.Timeout
-import com.tristanpenman.chordial.core.Node
+import com.tristanpenman.chordial.core.Router.{Start, StartFailed, StartOk}
+import com.tristanpenman.chordial.core.{Node, Router}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
@@ -22,8 +20,6 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
 
   implicit val ec: ExecutionContextExecutor = context.system.dispatcher
 
-  IO(Udp) ! Udp.Bind(self, new InetSocketAddress(nodeAddress, nodePort))
-
   // How long Node should wait until an algorithm is considered to have timed out. This should be significantly
   // longer than the external request timeout, as some algorithms will make multiple external requests before
   // running to completion
@@ -31,6 +27,10 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
 
   // How long to wait when making requests that may be routed to other nodes
   private val externalRequestTimeout = Timeout(500.milliseconds)
+
+  // Start the router
+  private val router = system.actorOf(Router.props())
+  router ! Start(nodeAddress, nodePort)
 
   // TODO: Research how to handle collisions...
   val firstNodeId: Long = Random.nextLong(idModulus)
@@ -46,15 +46,21 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
       log.info("not using a seed node")
   }
 
-  def receive: Receive = {
-    case Udp.Bound(_) =>
-      context.become(ready(sender()))
+  def ready: Receive = {
+    case m =>
+      log.debug("Received message", m)
   }
 
-  def ready(socket: ActorRef): Receive = {
-    // case Udp.Received(data, remote) =>
-    case Udp.Unbind  => socket ! Udp.Unbind
-    case Udp.Unbound => context.stop(self)
+  override def receive: Receive = {
+    case StartOk() =>
+      context.become(ready)
+
+    case StartFailed(reason) =>
+      log.error(s"Failed to start Router: ${reason}")
+      context.stop(self)
+
+    case m =>
+      log.warning("Unexpected message", m)
   }
 }
 

@@ -4,22 +4,45 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.io.{IO, Udp}
+import akka.pattern.ask
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
-import akka.util.ByteString
-import com.tristanpenman.chordial.core.Router._
+import akka.util.{ByteString, Timeout}
 import org.scalatest.WordSpecLike
 
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor}
 
 class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike with ImplicitSender {
+  import Router._
+
+  implicit val ec: ExecutionContextExecutor = system.dispatcher
+
   private val testProbe1 = TestProbe()
   private val testProbe2 = TestProbe()
+
+  private val defaultTimeout = Timeout(1.second)
+
+  private def startRouter(initialNodes: Map[Long, ActorRef]) = {
+    val routerRef = system.actorOf(Router.props(initialNodes))
+
+    val future = routerRef
+      .ask(Start("0.0.0.0", 0))(defaultTimeout)
+      .mapTo[StartResponse]
+      .map {
+        case StartOk() =>
+          routerRef
+        case StartFailed(reason) =>
+          throw new Exception(s"Failed to start Router: ${reason}")
+      }
+
+    Await.result(future, defaultTimeout.duration)
+  }
 
   "A RouterSpec actor" when {
     "initially constructed" should {
       "respond to a Register message with a RegisterOk message, then RegisterFailed for subsequent attempts" in {
-        val routerRef = system.actorOf(Router.props(Map.empty))
+        val routerRef = startRouter(Map.empty)
 
         routerRef ! Register(1, testProbe1.ref)
         expectMsg(RegisterOk(1))
@@ -29,7 +52,7 @@ class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike wi
       }
 
       "respond to a Unregister message with UnregisterFailed message if node is not registered" in {
-        val routerRef = system.actorOf(Router.props(Map.empty))
+        val routerRef = startRouter(Map.empty)
 
         routerRef ! Unregister(1)
         expectMsg(UnregisterFailed(1, "not registered"))
@@ -38,21 +61,21 @@ class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike wi
 
     "one node is registered" should {
       "respond to a Register message with a RegisterFailed message if id is already registered" in {
-        val routerRef = system.actorOf(Router.props(Map(1L -> testProbe1.ref)))
+        val routerRef = startRouter(Map(1L -> testProbe1.ref))
 
         routerRef ! Register(1, testProbe1.ref)
         expectMsg(RegisterFailed(1, "already registered"))
       }
 
       "respond to a Register message with a RegisterOk message if id is not already registered" in {
-        val routerRef = system.actorOf(Router.props(Map(1L -> testProbe1.ref)))
+        val routerRef = startRouter(Map(1L -> testProbe1.ref))
 
         routerRef ! Register(2, testProbe2.ref)
         expectMsg(RegisterOk(2))
       }
 
       "respond to a Unregister message with an UnregisterOk message if node is registered" in {
-        val routerRef = system.actorOf(Router.props(Map(1L -> testProbe1.ref)))
+        val routerRef = startRouter(Map(1L -> testProbe1.ref))
 
         routerRef ! Unregister(1)
         expectMsg(UnregisterOk(1))
@@ -64,7 +87,7 @@ class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike wi
 
     "two local nodes are registered" should {
       "handle a Forward message for a registered node by forwarding it to that node" in {
-        val routerRef = system.actorOf(Router.props(Map(1L -> testProbe1.ref, 2L -> testProbe2.ref)))
+        val routerRef = startRouter(Map(1L -> testProbe1.ref, 2L -> testProbe2.ref))
 
         routerRef ! Forward(2L, new InetSocketAddress("localhost", 333), "message")
         testProbe2.expectMsg("message")
@@ -74,7 +97,7 @@ class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike wi
       }
 
       "handle a Forward message for a remote node by sending the message via UDP" in {
-        val routerRef = system.actorOf(Router.props(Map(1L -> testProbe1.ref, 2L -> testProbe2.ref)))
+        val routerRef = startRouter(Map(1L -> testProbe1.ref, 2L -> testProbe2.ref))
         val udpReceiverProbe = TestProbe()
 
         // create an actor that can receive UDP messages
