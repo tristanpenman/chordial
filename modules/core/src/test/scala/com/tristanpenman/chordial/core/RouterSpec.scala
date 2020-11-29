@@ -30,13 +30,13 @@ class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike wi
       .ask(Start("0.0.0.0", 0))(defaultTimeout)
       .mapTo[StartResponse]
       .map {
-        case StartOk() =>
+        case StartOk(_) =>
           routerRef
         case StartFailed(reason) =>
           throw new Exception(s"Failed to start Router: ${reason}")
       }
 
-    Await.result(future, defaultTimeout.duration)
+    Await.result(future, Duration.Inf)
   }
 
   "A RouterSpec actor" when {

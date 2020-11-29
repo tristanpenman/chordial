@@ -58,9 +58,9 @@ class Router(initialNodes: Map[Long, ActorRef]) extends Actor with ActorLogging 
     case Start(_, _) =>
       sender() ! StartFailed("already starting")
 
-    case Udp.Bound(_) =>
+    case Udp.Bound(localAddress) =>
       context.become(ready(initialNodes, sender()))
-      replyTo ! StartOk()
+      replyTo ! StartOk(localAddress)
       unstashAll()
 
     case Udp.CommandFailed(_) =>
@@ -102,7 +102,7 @@ object Router {
 
   final case class StartFailed(reason: String) extends StartResponse
 
-  final case class StartOk() extends StartResponse
+  final case class StartOk(localAddress: InetSocketAddress) extends StartResponse
 
   sealed trait UnregisterResponse
 

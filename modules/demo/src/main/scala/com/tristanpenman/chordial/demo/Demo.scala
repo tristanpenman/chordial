@@ -9,8 +9,8 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Event
 import com.tristanpenman.chordial.core.Event._
 
-import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor}
 
 object Demo extends App {
   implicit val system: ActorSystem = ActorSystem("chordial-demo")
@@ -25,8 +25,7 @@ object Demo extends App {
 
   // Create an actor that is responsible for creating and terminating nodes, while ensuring
   // that nodes are assigned unique IDs in the Chord key-space
-  private val governor =
-    system.actorOf(Governor.props(keyspaceBits), "Governor")
+  private val governor = system.actorOf(Governor.props(keyspaceBits), "Governor")
 
   // Create an actor that will log events published by nodes
   private val eventWriter = system.actorOf(EventWriter.props, "EventWriter")

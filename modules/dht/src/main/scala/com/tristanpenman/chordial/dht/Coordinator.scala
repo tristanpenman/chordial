@@ -1,6 +1,6 @@
 package com.tristanpenman.chordial.dht
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, Props}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Router.{Start, StartFailed, StartOk}
 import com.tristanpenman.chordial.core.{Node, Router}
@@ -32,13 +32,6 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
   private val router = system.actorOf(Router.props())
   router ! Start(nodeAddress, nodePort)
 
-  // TODO: Research how to handle collisions...
-  val firstNodeId: Long = Random.nextLong(idModulus)
-  val firstNode: ActorRef = system.actorOf(
-    Node.props(firstNodeId, keyspaceBits, algorithmTimeout, externalRequestTimeout, system.eventStream),
-    "node:" + firstNodeId
-  )
-
   seedNode match {
     case Some(value) =>
       log.info(s"seed node: ${value}")
@@ -52,8 +45,19 @@ class Coordinator(keyspaceBits: Int, nodeAddress: String, nodePort: Int, seedNod
   }
 
   override def receive: Receive = {
-    case StartOk() =>
+    case StartOk(localAddress) =>
       context.become(ready)
+      // TODO: Research how to handle collisions...
+      val firstNodeId: Long = Random.nextLong(idModulus)
+      val firstNodeName = s"node:${firstNodeId}"
+      system.actorOf(Node.props(firstNodeId,
+                                localAddress,
+                                keyspaceBits,
+                                algorithmTimeout,
+                                externalRequestTimeout,
+                                system.eventStream,
+                                router),
+                     firstNodeName)
 
     case StartFailed(reason) =>
       log.error(s"Failed to start Router: ${reason}")

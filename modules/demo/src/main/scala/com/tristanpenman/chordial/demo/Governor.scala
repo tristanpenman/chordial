@@ -1,21 +1,28 @@
 package com.tristanpenman.chordial.demo
 
+import java.net.InetSocketAddress
+
 import akka.actor._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Event.NodeShuttingDown
-import com.tristanpenman.chordial.core.Node
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Pointers.{GetSuccessor, GetSuccessorOk, GetSuccessorResponse}
+import com.tristanpenman.chordial.core.Router.{Start, StartFailed, StartOk}
+import com.tristanpenman.chordial.core.{Node, Router}
 
 import scala.annotation.tailrec
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success}
 
-final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
+final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging with Stash {
   import Governor._
   import context.dispatcher
+
+  private val router = context.system.actorOf(Router.props())
+
+  router ! Start("0.0.0.0", 0)
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
 
@@ -32,14 +39,16 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
   private val joinRequestTimeout = Timeout(2000.milliseconds)
   private val getSuccessorRequestTimeout = Timeout(2000.milliseconds)
 
-  private def createNode(nodeId: Long): ActorRef =
+  private def createNode(nodeId: Long, nodeAddr: InetSocketAddress): ActorRef =
     context.system.actorOf(
       Node.props(
         nodeId,
+        nodeAddr,
         keyspaceBits,
         algorithmTimeout,
         externalRequestTimeout,
-        context.system.eventStream
+        context.system.eventStream,
+        router
       )
     )
 
@@ -49,17 +58,14 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
     if (nodeIds.contains(id)) generateUniqueId(nodeIds) else id
   }
 
-  private def receiveWithNodes(nodes: Map[Long, ActorRef], terminatedNodes: Set[Long]): Receive = {
+  private def receiveWithNodes(nodeAddr: InetSocketAddress,
+                               nodes: Map[Long, ActorRef],
+                               terminatedNodes: Set[Long]): Receive = {
     case CreateNode =>
       if (nodes.size < idModulus) {
         val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
-        val nodeRef = createNode(nodeId)
-        context.become(
-          receiveWithNodes(
-            nodes + (nodeId -> nodeRef),
-            terminatedNodes
-          )
-        )
+        val nodeRef = createNode(nodeId, nodeAddr)
+        context.become(receiveWithNodes(nodeAddr, nodes + (nodeId -> nodeRef), terminatedNodes))
         sender() ! CreateNodeOk(nodeId, nodeRef)
       } else {
         sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already created")
@@ -70,7 +76,7 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
         case Some(seedRef) =>
           if (nodes.size < idModulus) {
             val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
-            val nodeRef = createNode(nodeId)
+            val nodeRef = createNode(nodeId, nodeAddr)
             val joinRequest = nodeRef
               .ask(Join(seedId, seedRef))(joinRequestTimeout)
               .mapTo[JoinResponse]
@@ -84,12 +90,7 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
 
             Await.result(joinRequest, Duration.Inf) match {
               case Success(()) =>
-                context.become(
-                  receiveWithNodes(
-                    nodes + (nodeId -> nodeRef),
-                    terminatedNodes
-                  )
-                )
+                context.become(receiveWithNodes(nodeAddr, nodes + (nodeId -> nodeRef), terminatedNodes))
                 sender() ! CreateNodeWithSeedOk(nodeId, nodeRef)
               case Failure(ex) =>
                 context.stop(nodeRef)
@@ -141,12 +142,7 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
       nodes.get(nodeId) match {
         case Some(nodeRef) =>
           context.stop(nodeRef)
-          context.become(
-            receiveWithNodes(
-              nodes - nodeId,
-              terminatedNodes + nodeId
-            )
-          )
+          context.become(receiveWithNodes(nodeAddr, nodes - nodeId, terminatedNodes + nodeId))
           sender() ! TerminateNodeResponseOk
           context.system.eventStream.publish(NodeShuttingDown(nodeId))
 
@@ -155,8 +151,17 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging {
       }
   }
 
-  override def receive: Receive =
-    receiveWithNodes(Map.empty, Set.empty)
+  override def receive: Receive = {
+    case StartOk(localAddress) =>
+      context.become(receiveWithNodes(localAddress, Map.empty, Set.empty))
+      unstashAll()
+
+    case StartFailed(reason) =>
+      throw new Exception(s"Failed to start Router: ${reason}")
+
+    case _ =>
+      stash()
+  }
 }
 
 object Governor {

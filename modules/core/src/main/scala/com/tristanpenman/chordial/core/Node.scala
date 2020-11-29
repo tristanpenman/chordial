@@ -1,5 +1,7 @@
 package com.tristanpenman.chordial.core
 
+import java.net.InetSocketAddress
+
 import akka.actor._
 import akka.event.EventStream
 import akka.pattern.{ask, pipe}
@@ -16,11 +18,14 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
+//noinspection ScalaUnusedSymbol
 final class Node(nodeId: Long,
+                 nodeAddr: InetSocketAddress,
                  keyspaceBits: Int,
                  algorithmTimeout: Timeout,
                  externalRequestTimeout: Timeout,
-                 eventStream: EventStream)
+                 eventStream: EventStream,
+                 router: ActorRef)
     extends Actor
     with ActorLogging {
 
@@ -326,9 +331,11 @@ object Node {
   final case class NotifyError(message: String) extends NotifyResponse
 
   def props(nodeId: Long,
+            nodeAddr: InetSocketAddress,
             keyspaceBits: Int,
             algorithmTimeout: Timeout,
             requestTimeout: Timeout,
-            eventStream: EventStream): Props =
-    Props(new Node(nodeId, keyspaceBits, algorithmTimeout, requestTimeout, eventStream))
+            eventStream: EventStream,
+            router: ActorRef): Props =
+    Props(new Node(nodeId, nodeAddr, keyspaceBits, algorithmTimeout, requestTimeout, eventStream, router))
 }
