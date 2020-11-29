@@ -1,5 +1,7 @@
 package com.tristanpenman.chordial.demo
 
+import java.net.InetSocketAddress
+
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.tristanpenman.chordial.demo.Governor._
@@ -14,6 +16,8 @@ final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordS
 
   // Limit size of keyspace / number of nodes to 2^3 == 8
   private val keyspaceBits = 3
+
+  private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
 
   // Function to return the ID of an arbitrarily chosen Node owned by a given Governor actor
   private def getFirstNodeId(governor: ActorRef): Long = {
@@ -70,7 +74,7 @@ final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordS
       "respond to a CreateNodeWithSeed message with a CreateNodeWithSeedInvalidRequest message" in {
         val governor = newGovernor
         val seedId = getFirstNodeId(governor)
-        governor ! CreateNodeWithSeed(seedId)
+        governor ! CreateNodeWithSeed(seedId, dummyAddr)
         expectMsgType[CreateNodeWithSeedInvalidRequest]
       }
     }

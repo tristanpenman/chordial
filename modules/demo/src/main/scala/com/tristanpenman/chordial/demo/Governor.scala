@@ -71,14 +71,14 @@ final class Governor(val keyspaceBits: Int) extends Actor with ActorLogging with
         sender() ! CreateNodeInvalidRequest(s"Maximum of $idModulus Chord nodes already created")
       }
 
-    case CreateNodeWithSeed(seedId) =>
+    case CreateNodeWithSeed(seedId, seedAddr) =>
       nodes.get(seedId) match {
         case Some(seedRef) =>
           if (nodes.size < idModulus) {
             val nodeId = generateUniqueId(nodes.keySet ++ terminatedNodes)
             val nodeRef = createNode(nodeId, nodeAddr)
             val joinRequest = nodeRef
-              .ask(Join(seedId, seedRef))(joinRequestTimeout)
+              .ask(Join(seedId, seedAddr, seedRef))(joinRequestTimeout)
               .mapTo[JoinResponse]
               .map {
                 case JoinOk             => Success(())
@@ -180,7 +180,7 @@ object Governor {
 
   final case class CreateNodeInvalidRequest(message: String) extends CreateNodeResponse
 
-  final case class CreateNodeWithSeed(seedId: Long) extends Request
+  final case class CreateNodeWithSeed(seedId: Long, seedAddr: InetSocketAddress) extends Request
 
   sealed trait CreateNodeWithSeedResponse extends Response
 

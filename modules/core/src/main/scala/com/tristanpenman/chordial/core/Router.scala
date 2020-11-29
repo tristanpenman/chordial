@@ -26,8 +26,9 @@ class Router(initialNodes: Map[Long, ActorRef]) extends Actor with ActorLogging 
     case Forward(id, addr, message) =>
       nodes.get(id) match {
         case Some(ref) =>
-          ref ! message
+          ref forward message
         case _ =>
+          // TODO track outstanding request
           val s = serialization.findSerializerFor(message)
           val b: Array[Byte] = s.toBinary(message)
           udpSend ! Udp.Send(ByteString(b), addr)
@@ -49,6 +50,9 @@ class Router(initialNodes: Map[Long, ActorRef]) extends Actor with ActorLogging 
       } else {
         sender() ! UnregisterFailed(id, "not registered")
       }
+
+    case Udp.Received(data, sender) =>
+      log.debug(s"Received data from ${sender}", data)
 
     case _ =>
       log.error("unexpected message")

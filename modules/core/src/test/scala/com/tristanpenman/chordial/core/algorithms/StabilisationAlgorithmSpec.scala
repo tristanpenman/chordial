@@ -1,5 +1,7 @@
 package com.tristanpenman.chordial.core.algorithms
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
@@ -25,16 +27,18 @@ final class StabilisationAlgorithmSpec
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds
 
+  private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
+
   "A StabilisationAlgorithm actor" when {
     "initialised with a Pointers actor for a node that is its own successor" should {
       def newAlgorithm: ActorRef = {
         val nodeRef = TestActorRef(new Actor {
           override def receive: Receive = {
             case GetPredecessor =>
-              sender() ! GetPredecessorOk(NodeInfo(1L, self))
+              sender() ! GetPredecessorOk(NodeInfo(1L, dummyAddr, self))
             case GetSuccessor =>
-              sender() ! GetSuccessorOk(NodeInfo(1L, self))
-            case Notify(_, _) =>
+              sender() ! GetSuccessorOk(NodeInfo(1L, dummyAddr, self))
+            case Notify(_, _, _) =>
               sender() ! NotifyOk
             case m =>
               fail(s"Stub Node actor received an unexpected message of type: ${m.getClass})")
@@ -42,11 +46,11 @@ final class StabilisationAlgorithmSpec
         })
 
         val pointersRef = system.actorOf(
-          Pointers.props(1L, keyspaceBits, NodeInfo(1L, nodeRef), system.eventStream)
+          Pointers.props(1L, keyspaceBits, NodeInfo(1L, dummyAddr, nodeRef), system.eventStream)
         )
 
         system.actorOf(
-          StabilisationAlgorithm.props(NodeInfo(1L, nodeRef), pointersRef, algorithmTimeout)
+          StabilisationAlgorithm.props(NodeInfo(1L, dummyAddr, nodeRef), pointersRef, algorithmTimeout)
         )
       }
 

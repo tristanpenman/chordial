@@ -1,5 +1,7 @@
 package com.tristanpenman.chordial.core.algorithms
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
@@ -33,6 +35,8 @@ final class ClosestPrecedingNodeAlgorithmSpec
     }
   })
 
+  private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
+
   // Actor that will cause test to fail if it receives any messages
   private val dummyActorRef: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
@@ -52,7 +56,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
 
           override def receive: Receive = {
             case GetSuccessor =>
-              sender() ! GetSuccessorOk(NodeInfo(1L, dummyActorRef))
+              sender() ! GetSuccessorOk(NodeInfo(1L, dummyAddr, dummyActorRef))
               context.become(failOnReceive)
             case m =>
               fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
@@ -63,14 +67,14 @@ final class ClosestPrecedingNodeAlgorithmSpec
 
       testCases.foreach { input =>
         "return a pointer for Node with ID 1 when queried for ID " + input in {
-          val algorithm = newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
+          val algorithm = newAlgorithmActor(NodeInfo(1L, dummyAddr, dummyActorRef), newPointersActor)
           algorithm ! ClosestPrecedingNodeAlgorithmStart(input)
-          expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(1L, dummyActorRef)))
+          expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(1L, dummyAddr, dummyActorRef)))
         }
       }
 
       "finish without sending any further messages" in {
-        val algorithm = newAlgorithmActor(NodeInfo(1L, dummyActorRef), newPointersActor)
+        val algorithm = newAlgorithmActor(NodeInfo(1L, dummyAddr, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
         expectNoMessage(spuriousMessageDuration)
@@ -84,7 +88,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
         TestActorRef(new Actor {
           override def receive: Receive = {
             case GetSuccessor =>
-              sender() ! GetSuccessorOk(NodeInfo(successorId, dummyActorRef))
+              sender() ! GetSuccessorOk(NodeInfo(successorId, dummyAddr, dummyActorRef))
           }
         })
 
@@ -94,14 +98,14 @@ final class ClosestPrecedingNodeAlgorithmSpec
       testCases.foreach {
         case (input, output) =>
           "return a pointer for Node with ID " + output + " when queried for ID " + input in {
-            val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
+            val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyAddr, dummyActorRef), newPointersActor)
             algorithm ! ClosestPrecedingNodeAlgorithmStart(input)
-            expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(output, dummyActorRef)))
+            expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(output, dummyAddr, dummyActorRef)))
           }
       }
 
       "not send any additional messages after finishing" in {
-        val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
+        val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyAddr, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
         expectNoMessage(spuriousMessageDuration)
@@ -115,7 +119,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
         TestActorRef(new Actor {
           override def receive: Receive = {
             case GetSuccessor =>
-              sender() ! GetSuccessorOk(NodeInfo(successorId, dummyActorRef))
+              sender() ! GetSuccessorOk(NodeInfo(successorId, dummyAddr, dummyActorRef))
           }
         })
 
@@ -124,14 +128,14 @@ final class ClosestPrecedingNodeAlgorithmSpec
       testCases.foreach {
         case (input, output) =>
           "return a pointer for Node with ID " + output + " when queried for ID " + input in {
-            val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
+            val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyAddr, dummyActorRef), newPointersActor)
             algorithm ! ClosestPrecedingNodeAlgorithmStart(input)
-            expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(output, dummyActorRef)))
+            expectMsg(ClosestPrecedingNodeAlgorithmFinished(NodeInfo(output, dummyAddr, dummyActorRef)))
           }
       }
 
       "not send any additional messages after finishing" in {
-        val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyActorRef), newPointersActor)
+        val algorithm = newAlgorithmActor(NodeInfo(nodeId, dummyAddr, dummyActorRef), newPointersActor)
         algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmFinished]
         expectNoMessage(spuriousMessageDuration)
@@ -140,7 +144,8 @@ final class ClosestPrecedingNodeAlgorithmSpec
 
     "initialised with a Pointers actor that is unresponsive" should {
       "return an error" in {
-        newAlgorithmActor(NodeInfo(1L, dummyActorRef), unresponsiveActor) ! ClosestPrecedingNodeAlgorithmStart(1L)
+        newAlgorithmActor(NodeInfo(1L, dummyAddr, dummyActorRef), unresponsiveActor) ! ClosestPrecedingNodeAlgorithmStart(
+          1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmError]
         expectNoMessage(spuriousMessageDuration)
       }

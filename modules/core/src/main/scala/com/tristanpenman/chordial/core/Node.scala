@@ -34,6 +34,8 @@ final class Node(nodeId: Long,
 
   require(keyspaceBits > 0, "keyspaceBits must be a positive Int value")
 
+  private val nodeInfo = NodeInfo(nodeId, nodeAddr, self)
+
   private val idModulus = 1 << keyspaceBits
 
   // Finger table ranges from (nodeId + 2^1) up to (nodeId + 2^(keyspace - 1))
@@ -46,26 +48,17 @@ final class Node(nodeId: Long,
   require(nodeId >= 0, "ownId must be a non-negative Long value")
   require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
 
-  private def newPointers(nodeId: Long, seedId: Long, seedRef: ActorRef) =
-    context.actorOf(
-      Pointers
-        .props(nodeId, fingerTableSize, NodeInfo(seedId, seedRef), eventStream)
-    )
+  private def newPointers(nodeId: Long, seedInfo: NodeInfo) =
+    context.actorOf(Pointers.props(nodeId, fingerTableSize, seedInfo, eventStream))
 
   private def newCheckPredecessorAlgorithm(nodeRef: ActorRef) =
     context.actorOf(CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
 
   private def newStabilisationAlgorithm(pointersRef: ActorRef) =
-    context.actorOf(
-      StabilisationAlgorithm
-        .props(NodeInfo(nodeId, self), pointersRef, externalRequestTimeout)
-    )
+    context.actorOf(StabilisationAlgorithm.props(nodeInfo, pointersRef, externalRequestTimeout))
 
   private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
-    val algorithm = context.actorOf(
-      ClosestPrecedingNodeAlgorithm
-        .props(NodeInfo(nodeId, self), nodeRef, externalRequestTimeout)
-    )
+    val algorithm = context.actorOf(ClosestPrecedingNodeAlgorithm.props(nodeInfo, nodeRef, externalRequestTimeout))
     algorithm
       .ask(ClosestPrecedingNodeAlgorithmStart(queryId))(algorithmTimeout)
       .mapTo[ClosestPrecedingNodeAlgorithmStartResponse]
@@ -97,10 +90,9 @@ final class Node(nodeId: Long,
     // The FindPredecessorAlgorithm actor will shutdown immediately after it sends a FindPredecessorAlgorithmOk or
     // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
-    val findPredecessorAlgorithm =
-      context.actorOf(FindPredecessorAlgorithm.props())
+    val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props)
     findPredecessorAlgorithm
-      .ask(FindPredecessorAlgorithmStart(queryId, NodeInfo(nodeId, self)))(algorithmTimeout)
+      .ask(FindPredecessorAlgorithmStart(queryId, nodeInfo))(algorithmTimeout)
       .mapTo[FindPredecessorAlgorithmStartResponse]
       .map {
         case FindPredecessorAlgorithmOk(predecessor) =>
@@ -152,7 +144,7 @@ final class Node(nodeId: Long,
   private def notify(nodeRef: ActorRef, candidate: NodeInfo, replyTo: ActorRef) = {
     val notifyAlgorithm = context.actorOf(NotifyAlgorithm.props())
     notifyAlgorithm
-      .ask(NotifyAlgorithmStart(NodeInfo(nodeId, self), candidate, nodeRef))(algorithmTimeout)
+      .ask(NotifyAlgorithmStart(nodeInfo, candidate, nodeRef))(algorithmTimeout)
       .mapTo[NotifyAlgorithmStartResponse]
       .map {
         case NotifyAlgorithmOk(predecessorUpdated: Boolean) =>
@@ -231,7 +223,7 @@ final class Node(nodeId: Long,
     case FindSuccessor(queryId) =>
       findSuccessor(queryId, sender())
 
-    case Join(seedId, seedRef) =>
+    case Join(seedId, seedAddr, seedRef) =>
       checkPredecessorCancellable.cancel()
       stabilisationCancellable.cancel()
 
@@ -239,7 +231,8 @@ final class Node(nodeId: Long,
       context.stop(checkPredecessorAlgorithm)
       context.stop(stabilisationAlgorithm)
 
-      val newPointersRef = newPointers(nodeId, seedId, seedRef)
+      val seedInfo = NodeInfo(seedId, seedAddr, seedRef)
+      val newPointersRef = newPointers(nodeId, seedInfo)
 
       val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
       val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
@@ -259,12 +252,12 @@ final class Node(nodeId: Long,
 
       sender() ! JoinOk
 
-    case Notify(candidateId, candidateRef) =>
-      notify(nodeRef, NodeInfo(candidateId, candidateRef), sender())
+    case Notify(candidateId, candidateAddr, candidateRef) =>
+      notify(nodeRef, NodeInfo(candidateId, candidateAddr, candidateRef), sender())
   }
 
   override def receive: Receive = {
-    val newPointersRef = newPointers(nodeId, nodeId, self)
+    val newPointersRef = newPointers(nodeId, nodeInfo)
 
     val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
     val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
@@ -312,7 +305,7 @@ object Node {
 
   final case class FindSuccessorError(queryId: Long, message: String) extends FindSuccessorResponse
 
-  final case class Join(seedId: Long, seedRef: ActorRef) extends Request
+  final case class Join(seedId: Long, seedAddr: InetSocketAddress, seedRef: ActorRef) extends Request
 
   sealed trait JoinResponse extends Response
 
@@ -320,7 +313,7 @@ object Node {
 
   final case class JoinError(message: String) extends JoinResponse
 
-  final case class Notify(nodeId: Long, nodeRef: ActorRef) extends Request
+  final case class Notify(nodeId: Long, nodeAddr: InetSocketAddress, nodeRef: ActorRef) extends Request
 
   sealed trait NotifyResponse extends Response
 

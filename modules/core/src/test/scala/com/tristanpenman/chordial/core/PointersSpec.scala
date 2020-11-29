@@ -1,5 +1,7 @@
 package com.tristanpenman.chordial.core
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
@@ -19,6 +21,10 @@ final class PointersSpec
 
   implicit val timeout: Timeout = Timeout(2000.milliseconds)
 
+  private val ownId = 1L
+  private val seedId = 2L
+  private val keyspaceBits = 3
+
   private val dummyActorRef: ActorRef = TestActorRef(new Actor {
     def receive: Receive = {
       case message =>
@@ -26,15 +32,15 @@ final class PointersSpec
     }
   })
 
-  private val ownId = 1L
-  private val seedId = 2L
-  private val keyspaceBits = 3
+  private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
+  private val dummySeedInfo = NodeInfo(seedId, dummyAddr, dummyActorRef)
 
   "A Pointers actor" when {
 
     "initially constructed" should {
       def newPointersActor: ActorRef =
-        system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
+        system.actorOf(
+          Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyAddr, dummyActorRef), system.eventStream))
 
       "respond to a GetId message with a GetIdOk message containing its ID" in {
         newPointersActor ! GetId
@@ -48,17 +54,17 @@ final class PointersSpec
 
       "respond to a GetSuccessor message with a GetSuccessorOk message containing its successor's ID" in {
         newPointersActor ! GetSuccessor
-        expectMsg(GetSuccessorOk(NodeInfo(seedId, dummyActorRef)))
+        expectMsg(GetSuccessorOk(dummySeedInfo))
       }
     }
 
     "its predecessor has been updated" should {
       def newPointersActor: ActorRef = {
         val actor =
-          system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
+          system.actorOf(Pointers.props(ownId, keyspaceBits, dummySeedInfo, system.eventStream))
 
         // Set predecessor pointer
-        val future = actor.ask(UpdatePredecessor(NodeInfo(0L, self)))
+        val future = actor.ask(UpdatePredecessor(NodeInfo(0L, dummyAddr, self)))
 
         // Wait for update to be acknowledged
         assert(future.futureValue == UpdatePredecessorOk)
@@ -67,7 +73,7 @@ final class PointersSpec
 
       "respond to a GetPredecessor message with a GetPredecessorOk message containing its predecessor's ID" in {
         newPointersActor ! GetPredecessor
-        expectMsg(GetPredecessorOk(NodeInfo(0L, self)))
+        expectMsg(GetPredecessorOk(NodeInfo(0L, dummyAddr, self)))
       }
 
       "respond to a ResetPredecessor message with a ResetPredecessorOk message, and respond to a subsequent " +
@@ -84,11 +90,11 @@ final class PointersSpec
 
     "its successor list has been updated" should {
       val successorId = 3L
-      val successor = NodeInfo(successorId, dummyActorRef)
+      val successor = NodeInfo(successorId, dummyAddr, dummyActorRef)
 
       def newPointersActor: ActorRef = {
         val actor =
-          system.actorOf(Pointers.props(ownId, keyspaceBits, NodeInfo(seedId, dummyActorRef), system.eventStream))
+          system.actorOf(Pointers.props(ownId, keyspaceBits, dummySeedInfo, system.eventStream))
 
         // Update successor list
         val future = actor.ask(UpdateSuccessor(successor))
@@ -107,7 +113,7 @@ final class PointersSpec
         "GetSuccessor message with the new successor" in {
         val pointersActor = newPointersActor
         val newSuccessorId = 2L
-        val newSuccessor = NodeInfo(newSuccessorId, dummyActorRef)
+        val newSuccessor = NodeInfo(newSuccessorId, dummyAddr, dummyActorRef)
 
         pointersActor ! UpdateSuccessor(newSuccessor)
         expectMsg(UpdateSuccessorOk)

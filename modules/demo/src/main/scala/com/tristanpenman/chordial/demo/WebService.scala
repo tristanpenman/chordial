@@ -1,8 +1,11 @@
 package com.tristanpenman.chordial.demo
 
+import java.net.InetSocketAddress
+
 import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import akka.util.Timeout
 import com.tristanpenman.chordial.demo.Governor._
@@ -14,7 +17,7 @@ import scala.concurrent.{ExecutionContext, Future}
 object WebService extends DefaultJsonProtocol {
   final case class NodeAttributes(nodeId: Long, successorId: Option[Long], active: Boolean)
 
-  implicit val nodeAttributeFormat = jsonFormat3(NodeAttributes)
+  implicit val nodeAttributeFormat: RootJsonFormat[NodeAttributes] = jsonFormat3(NodeAttributes)
 }
 
 trait WebService {
@@ -25,7 +28,9 @@ trait WebService {
 
   implicit val timeout: Timeout = 3.seconds
 
-  private def messageForInternalServerError =
+  private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
+
+  private val messageForInternalServerError =
     "The request failed due to an internal server error. Details will be available in the server logs."
 
   private def getNodeAttributes(governor: ActorRef, nodeId: Long): Future[NodeAttributes] =
@@ -79,7 +84,7 @@ trait WebService {
           throw new Exception(message)
       }
 
-  protected def routes(governor: ActorRef) = pathPrefix("nodes") {
+  protected def routes(governor: ActorRef): Route = pathPrefix("nodes") {
     pathEndOrSingleSlash {
       get {
         val future = getNodes(governor)
@@ -93,7 +98,7 @@ trait WebService {
         parameters(Symbol("seed_id").?) {
           case Some(seedId) =>
             val future = governor
-              .ask(CreateNodeWithSeed(seedId.toLong))
+              .ask(CreateNodeWithSeed(seedId.toLong, dummyAddr))
               .mapTo[CreateNodeWithSeedResponse]
             onSuccess(future) {
               case CreateNodeWithSeedOk(nodeId, _) =>

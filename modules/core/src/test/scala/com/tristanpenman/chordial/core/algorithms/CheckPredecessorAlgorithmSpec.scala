@@ -1,5 +1,7 @@
 package com.tristanpenman.chordial.core.algorithms
 
+import java.net.InetSocketAddress
+
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
@@ -20,6 +22,8 @@ final class CheckPredecessorAlgorithmSpec
 
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds
+
+  private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
 
   // Function to create a new CheckPredecessorAlgorithm actor using a given ActorRef as the Pointers actor
   private def newAlgorithmActor(pointersActor: ActorRef): ActorRef =
@@ -62,14 +66,14 @@ final class CheckPredecessorAlgorithmSpec
         val healthyPredecessor = TestActorRef(new Actor {
           override def receive: Receive = {
             case GetSuccessor =>
-              sender() ! GetSuccessorOk(NodeInfo(1L, self))
+              sender() ! GetSuccessorOk(NodeInfo(1L, dummyAddr, self))
           }
         })
 
         TestActorRef(new Actor {
           override def receive: Receive = {
             case GetPredecessor =>
-              sender() ! GetPredecessorOk(NodeInfo(1L, healthyPredecessor))
+              sender() ! GetPredecessorOk(NodeInfo(1L, dummyAddr, healthyPredecessor))
             case m =>
               fail(s"Pointers actor received an unexpected message of type: ${m.getClass})")
           }
@@ -95,7 +99,7 @@ final class CheckPredecessorAlgorithmSpec
 
           override def receive: Receive = {
             case GetPredecessor =>
-              sender() ! GetPredecessorOk(NodeInfo(1L, unresponsiveActor))
+              sender() ! GetPredecessorOk(NodeInfo(1L, dummyAddr, unresponsiveActor))
             case ResetPredecessor =>
               sender() ! ResetPredecessorOk
               context.become(receiveWithUnknownPredecessor)

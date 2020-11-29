@@ -69,7 +69,7 @@ final class StabilisationAlgorithm(node: NodeInfo, pointersRef: ActorRef, reques
 
     case UpdateSuccessorOk =>
       context.become(awaitNotify(replyTo))
-      successor ! Notify(node.id, node.ref)
+      successor ! Notify(node.id, node.addr, node.ref)
 
     case ReceiveTimeout =>
       context.setReceiveTimeout(Duration.Undefined)
@@ -87,7 +87,7 @@ final class StabilisationAlgorithm(node: NodeInfo, pointersRef: ActorRef, reques
 
     case GetPredecessorOk(_) | GetPredecessorOkButUnknown =>
       context.become(awaitNotify(replyTo))
-      successor.ref ! Notify(node.id, node.ref)
+      successor.ref ! Notify(node.id, node.addr, node.ref)
 
     case ReceiveTimeout =>
       context.setReceiveTimeout(Duration.Undefined)

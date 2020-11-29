@@ -37,7 +37,11 @@ final class ClosestPrecedingNodeAlgorithm(node: NodeInfo, pointersRef: ActorRef,
       context.setReceiveTimeout(Duration.Undefined)
       context.become(receive)
       replyTo ! ClosestPrecedingNodeAlgorithmFinished(
-        if (Interval(node.id + 1, queryId).contains(successor.id)) successor else node)
+        if (Interval(node.id + 1, queryId).contains(successor.id))
+          successor
+        else
+          node
+      )
 
     case ReceiveTimeout =>
       context.setReceiveTimeout(Duration.Undefined)
