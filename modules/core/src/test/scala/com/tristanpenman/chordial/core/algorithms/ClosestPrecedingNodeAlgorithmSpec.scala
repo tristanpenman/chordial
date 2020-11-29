@@ -92,8 +92,7 @@ final class ClosestPrecedingNodeAlgorithmSpec
           }
         })
 
-      val testCases =
-        SortedMap(0L -> 3L, 1L -> 3L, 2L -> 1L, 3L -> 1L, 4L -> 3L)
+      val testCases = SortedMap(0L -> 3L, 1L -> 3L, 2L -> 1L, 3L -> 1L, 4L -> 3L)
 
       testCases.foreach {
         case (input, output) =>
@@ -144,8 +143,8 @@ final class ClosestPrecedingNodeAlgorithmSpec
 
     "initialised with a Pointers actor that is unresponsive" should {
       "return an error" in {
-        newAlgorithmActor(NodeInfo(1L, dummyAddr, dummyActorRef), unresponsiveActor) ! ClosestPrecedingNodeAlgorithmStart(
-          1L)
+        val algorithm = newAlgorithmActor(NodeInfo(1L, dummyAddr, dummyActorRef), unresponsiveActor)
+        algorithm ! ClosestPrecedingNodeAlgorithmStart(1L)
         expectMsgType[ClosestPrecedingNodeAlgorithmError]
         expectNoMessage(spuriousMessageDuration)
       }

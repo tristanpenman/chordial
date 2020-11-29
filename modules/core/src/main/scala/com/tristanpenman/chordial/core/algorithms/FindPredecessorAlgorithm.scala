@@ -23,15 +23,14 @@ import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
   *
   * Note that the NOT_IN operator is defined in terms of an interval that wraps around to the minimum value.
   */
-final class FindPredecessorAlgorithm extends Actor with ActorLogging {
+final class FindPredecessorAlgorithm(router: ActorRef) extends Actor with ActorLogging {
 
   import FindPredecessorAlgorithm._
 
   def awaitGetSuccessor(queryId: Long, delegate: ActorRef, candidate: NodeInfo): Actor.Receive = {
     case GetSuccessorOk(successor: NodeInfo) =>
       // Check whether the query ID belongs to the candidate node's successor
-      if (Interval(candidate.id + 1, successor.id + 1)
-            .contains(queryId)) {
+      if (Interval(candidate.id + 1, successor.id + 1).contains(queryId)) {
         // If the query ID belongs to the candidate node's successor, then we have successfully found the predecessor
         delegate ! FindPredecessorAlgorithmOk(candidate)
         context.stop(self)
@@ -89,6 +88,6 @@ object FindPredecessorAlgorithm {
 
   final case class FindPredecessorAlgorithmError(message: String) extends FindPredecessorAlgorithmStartResponse
 
-  def props(): Props = Props(new FindPredecessorAlgorithm())
+  def props(router: ActorRef): Props = Props(new FindPredecessorAlgorithm(router))
 
 }

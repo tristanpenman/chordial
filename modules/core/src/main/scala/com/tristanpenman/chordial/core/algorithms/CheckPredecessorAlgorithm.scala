@@ -28,7 +28,9 @@ import scala.concurrent.duration.Duration
   * When the algorithm completes, a \c CheckPredecessorAlgorithmFinished or \c CheckPredecessorAlgorithmError message
   * will be sent to the original sender, depending on the outcome.
   */
-final class CheckPredecessorAlgorithm(pointersRef: ActorRef, requestTimeout: Timeout) extends Actor with ActorLogging {
+final class CheckPredecessorAlgorithm(router: ActorRef, pointersRef: ActorRef, requestTimeout: Timeout)
+    extends Actor
+    with ActorLogging {
 
   import CheckPredecessorAlgorithm._
 
@@ -102,6 +104,6 @@ object CheckPredecessorAlgorithm {
 
   case object CheckPredecessorAlgorithmReady extends CheckPredecessorAlgorithmResetResponse
 
-  def props(pointersRef: ActorRef, requestTimeout: Timeout): Props =
-    Props(new CheckPredecessorAlgorithm(pointersRef, requestTimeout))
+  def props(router: ActorRef, pointersRef: ActorRef, requestTimeout: Timeout): Props =
+    Props(new CheckPredecessorAlgorithm(router, pointersRef, requestTimeout))
 }

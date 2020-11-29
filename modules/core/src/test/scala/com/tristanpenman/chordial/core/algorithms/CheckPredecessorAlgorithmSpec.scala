@@ -3,13 +3,17 @@ package com.tristanpenman.chordial.core.algorithms
 import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.pattern.ask
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Pointers._
+import com.tristanpenman.chordial.core.Router
+import com.tristanpenman.chordial.core.Router.{Start, StartFailed, StartOk, StartResponse}
 import com.tristanpenman.chordial.core.algorithms.CheckPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
 
+import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration._
 
 final class CheckPredecessorAlgorithmSpec
@@ -17,17 +21,36 @@ final class CheckPredecessorAlgorithmSpec
     with WordSpecLike
     with ImplicitSender {
 
+  implicit val ec: ExecutionContextExecutor = system.dispatcher
+
   // Timeout for requests performed within CheckPredecessorAlgorithm actor
-  private val algorithmTimeout = Timeout(300.milliseconds)
+  private val defaultTimeout = Timeout(300.milliseconds)
 
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds
 
   private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
 
+  private val router = {
+    val routerRef = system.actorOf(Router.props(Map.empty))
+
+    Await.result(
+      routerRef
+        .ask(Start("0.0.0.0", 0))(defaultTimeout)
+        .mapTo[StartResponse]
+        .map {
+          case StartOk(_) =>
+            routerRef
+          case StartFailed(reason) =>
+            throw new Exception(s"Failed to start Router: ${reason}")
+        },
+      Duration.Inf
+    )
+  }
+
   // Function to create a new CheckPredecessorAlgorithm actor using a given ActorRef as the Pointers actor
   private def newAlgorithmActor(pointersActor: ActorRef): ActorRef =
-    system.actorOf(CheckPredecessorAlgorithm.props(pointersActor, algorithmTimeout))
+    system.actorOf(CheckPredecessorAlgorithm.props(router, pointersActor, defaultTimeout))
 
   // Actor that will always discard messages
   private val unresponsiveActor = TestActorRef(new Actor {

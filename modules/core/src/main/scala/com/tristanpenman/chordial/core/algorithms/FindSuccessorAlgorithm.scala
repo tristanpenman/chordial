@@ -19,7 +19,7 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
   * Although the algorithm is defined a way that allows 'find_predecessor' to be performed as an ordinary method call,
   * this class performs the operation by sending a message to an ActorRef and awaiting a response.
   */
-final class FindSuccessorAlgorithm extends Actor with ActorLogging {
+final class FindSuccessorAlgorithm(router: ActorRef) extends Actor with ActorLogging {
 
   import FindSuccessorAlgorithm._
 
@@ -73,5 +73,5 @@ object FindSuccessorAlgorithm {
 
   final case class FindSuccessorAlgorithmError(message: String) extends FindSuccessorAlgorithmStartResponse
 
-  def props(): Props = Props(new FindSuccessorAlgorithm())
+  def props(router: ActorRef): Props = Props(new FindSuccessorAlgorithm(router))
 }

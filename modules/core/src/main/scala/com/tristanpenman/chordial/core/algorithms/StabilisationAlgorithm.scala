@@ -41,7 +41,7 @@ import scala.concurrent.duration.Duration
   * When the algorithm completes, a \c StabilisationAlgorithmFinished or \c StabilisationAlgorithmError message will be
   * sent to the original sender, depending on the outcome.
   */
-final class StabilisationAlgorithm(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout)
+final class StabilisationAlgorithm(router: ActorRef, node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout)
     extends Actor
     with ActorLogging {
 
@@ -112,9 +112,8 @@ final class StabilisationAlgorithm(node: NodeInfo, pointersRef: ActorRef, reques
 
   override def receive: Receive = {
     case StabilisationAlgorithmStart =>
-      val replyTo = sender()
       context.setReceiveTimeout(requestTimeout.duration)
-      context.become(awaitGetSuccessor(replyTo))
+      context.become(awaitGetSuccessor(sender()))
       pointersRef ! GetSuccessor
   }
 }
@@ -133,6 +132,6 @@ object StabilisationAlgorithm {
 
   final case class StabilisationAlgorithmError(message: String) extends StabilisationAlgorithmStartResponse
 
-  def props(node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Props =
-    Props(new StabilisationAlgorithm(node, pointersRef, requestTimeout))
+  def props(router: ActorRef, node: NodeInfo, pointersRef: ActorRef, requestTimeout: Timeout): Props =
+    Props(new StabilisationAlgorithm(router, node, pointersRef, requestTimeout))
 }

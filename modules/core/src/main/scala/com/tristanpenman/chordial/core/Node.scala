@@ -6,6 +6,7 @@ import akka.actor._
 import akka.event.EventStream
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
+import com.tristanpenman.chordial.core.Router.{Register, RegisterOk}
 import com.tristanpenman.chordial.core.algorithms.CheckPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.algorithms.ClosestPrecedingNodeAlgorithm._
 import com.tristanpenman.chordial.core.algorithms.FindPredecessorAlgorithm._
@@ -18,7 +19,6 @@ import com.tristanpenman.chordial.core.shared.NodeInfo
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
-//noinspection ScalaUnusedSymbol
 final class Node(nodeId: Long,
                  nodeAddr: InetSocketAddress,
                  keyspaceBits: Int,
@@ -48,14 +48,16 @@ final class Node(nodeId: Long,
   require(nodeId >= 0, "ownId must be a non-negative Long value")
   require(nodeId < idModulus, s"ownId must be less than $idModulus (2^$keyspaceBits})")
 
+  router ! Register(nodeId, self)
+
   private def newPointers(nodeId: Long, seedInfo: NodeInfo) =
     context.actorOf(Pointers.props(nodeId, fingerTableSize, seedInfo, eventStream))
 
   private def newCheckPredecessorAlgorithm(nodeRef: ActorRef) =
-    context.actorOf(CheckPredecessorAlgorithm.props(nodeRef, externalRequestTimeout))
+    context.actorOf(CheckPredecessorAlgorithm.props(router, nodeRef, externalRequestTimeout))
 
   private def newStabilisationAlgorithm(pointersRef: ActorRef) =
-    context.actorOf(StabilisationAlgorithm.props(nodeInfo, pointersRef, externalRequestTimeout))
+    context.actorOf(StabilisationAlgorithm.props(router, nodeInfo, pointersRef, externalRequestTimeout))
 
   private def closestPrecedingFinger(nodeRef: ActorRef, queryId: Long, replyTo: ActorRef) = {
     val algorithm = context.actorOf(ClosestPrecedingNodeAlgorithm.props(nodeInfo, nodeRef, externalRequestTimeout))
@@ -90,7 +92,7 @@ final class Node(nodeId: Long,
     // The FindPredecessorAlgorithm actor will shutdown immediately after it sends a FindPredecessorAlgorithmOk or
     // FindPredecessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
-    val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props)
+    val findPredecessorAlgorithm = context.actorOf(FindPredecessorAlgorithm.props(router))
     findPredecessorAlgorithm
       .ask(FindPredecessorAlgorithmStart(queryId, nodeInfo))(algorithmTimeout)
       .mapTo[FindPredecessorAlgorithmStartResponse]
@@ -121,7 +123,7 @@ final class Node(nodeId: Long,
     // The FindSuccessorAlgorithm actor will shutdown immediately after it sends a FindSuccessorAlgorithmOk or
     // FindSuccessorAlgorithmError message. However, if the future returned by the 'ask' request does not complete
     // within the timeout period, the actor must be shutdown manually to ensure that it does not run indefinitely.
-    val findSuccessorAlgorithm = context.actorOf(FindSuccessorAlgorithm.props())
+    val findSuccessorAlgorithm = context.actorOf(FindSuccessorAlgorithm.props(router))
     findSuccessorAlgorithm
       .ask(FindSuccessorAlgorithmStart(queryId, self))(algorithmTimeout)
       .mapTo[FindSuccessorAlgorithmStartResponse]
@@ -257,21 +259,26 @@ final class Node(nodeId: Long,
   }
 
   override def receive: Receive = {
-    val newPointersRef = newPointers(nodeId, nodeInfo)
+    case RegisterOk(_) =>
+      val newPointersRef = newPointers(nodeId, nodeInfo)
 
-    val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
-    val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
+      val newCheckPredecessorAlgorithmRef = newCheckPredecessorAlgorithm(newPointersRef)
+      val newCheckPredecessorCancellable = scheduleCheckPredecessor(newCheckPredecessorAlgorithmRef)
 
-    val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
-    val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef)
+      val newStabilisationAlgorithmRef = newStabilisationAlgorithm(newPointersRef)
+      val newStabilisationCancellable = scheduleStabilisation(newStabilisationAlgorithmRef)
 
-    receiveWhileReady(
-      newPointersRef,
-      newCheckPredecessorAlgorithmRef,
-      newCheckPredecessorCancellable,
-      newStabilisationAlgorithmRef,
-      newStabilisationCancellable
-    )
+      context.become(
+        receiveWhileReady(
+          newPointersRef,
+          newCheckPredecessorAlgorithmRef,
+          newCheckPredecessorCancellable,
+          newStabilisationAlgorithmRef,
+          newStabilisationCancellable
+        ))
+
+    case m =>
+      log.warning("Unexpected message", m)
   }
 }
 
