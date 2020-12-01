@@ -8,13 +8,21 @@ import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.Router
-import com.tristanpenman.chordial.core.Router.{Start, StartFailed, StartOk, StartResponse}
+import com.tristanpenman.chordial.core.Router.{
+  Register,
+  RegisterOk,
+  RegisterResponse,
+  Start,
+  StartFailed,
+  StartOk,
+  StartResponse
+}
 import com.tristanpenman.chordial.core.algorithms.CheckPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
 
-import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor}
 
 final class CheckPredecessorAlgorithmSpec
     extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec"))
@@ -31,7 +39,7 @@ final class CheckPredecessorAlgorithmSpec
 
   private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
 
-  private val router = {
+  private def newRouter = {
     val routerRef = system.actorOf(Router.props(Map.empty))
 
     Await.result(
@@ -48,8 +56,22 @@ final class CheckPredecessorAlgorithmSpec
     )
   }
 
+  def registerNode(router: ActorRef, actorId: Long, actorRef: ActorRef): ActorRef =
+    Await.result(
+      router
+        .ask(Register(actorId, actorRef))(defaultTimeout)
+        .mapTo[RegisterResponse]
+        .map {
+          case RegisterOk(_) =>
+            actorRef
+          case _ =>
+            throw new Exception("Failed to register node")
+        },
+      Duration.Inf
+    )
+
   // Function to create a new CheckPredecessorAlgorithm actor using a given ActorRef as the Pointers actor
-  private def newAlgorithmActor(pointersActor: ActorRef): ActorRef =
+  private def newAlgorithmActor(router: ActorRef, pointersActor: ActorRef): ActorRef =
     system.actorOf(CheckPredecessorAlgorithm.props(router, pointersActor, defaultTimeout))
 
   // Actor that will always discard messages
@@ -61,6 +83,8 @@ final class CheckPredecessorAlgorithmSpec
 
   "A CheckPredecessorAlgorithm actor" when {
     "initialised with a Pointers actor that does not have a predecessor" should {
+
+      // Fake Pointers actor that responds with GetPredecessorOkButUnknown when GetPredecessor is received
       def newPointersActor: ActorRef =
         TestActorRef(new Actor {
           def failOnReceive: Receive = {
@@ -78,20 +102,26 @@ final class CheckPredecessorAlgorithmSpec
         })
 
       "finish successfully without sending any further messages" in {
-        newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart
+        val router = newRouter
+        val pointers = newPointersActor
+        val algorithm = newAlgorithmActor(router, pointers)
+
+        algorithm ! CheckPredecessorAlgorithmStart
         expectMsg(CheckPredecessorAlgorithmFinished)
         expectNoMessage(spuriousMessageDuration)
       }
     }
 
     "initialised with a Pointers actor whose predecessor is healthy" should {
-      def newPointersActor: ActorRef = {
-        val healthyPredecessor = TestActorRef(new Actor {
+
+      // Fake Pointers actor that responds with GetPredecessorOk when GetPredecessor is received
+      def newPointersActor(router: ActorRef): ActorRef = {
+        val healthyPredecessor = registerNode(router, 1L, TestActorRef(new Actor {
           override def receive: Receive = {
             case GetSuccessor =>
               sender() ! GetSuccessorOk(NodeInfo(1L, dummyAddr, self))
           }
-        })
+        }))
 
         TestActorRef(new Actor {
           override def receive: Receive = {
@@ -104,13 +134,21 @@ final class CheckPredecessorAlgorithmSpec
       }
 
       "finish successfully without sending any further messages" in {
-        newAlgorithmActor(newPointersActor) ! CheckPredecessorAlgorithmStart
+        val router = newRouter
+        val pointers = newPointersActor(router)
+        val algorithm = newAlgorithmActor(router, pointers)
+
+        algorithm ! CheckPredecessorAlgorithmStart
         expectMsg(CheckPredecessorAlgorithmFinished)
         expectNoMessage(spuriousMessageDuration)
       }
     }
 
     "initialised with a Pointers actor whose predecessor is unresponsive" should {
+
+      // Fake Pointers actor that responds with GetPredecessorOk when GetPredecessor is received, with a reference
+      // to a unresponsive Node. After receiving ResetPredecessor, it will respond with GetPredecessorOkButUnknown
+      // instead, having 'forgotten' its predecessor.
       def newPointersActor: ActorRef =
         TestActorRef(new Actor {
           def receiveWithUnknownPredecessor: Receive = {
@@ -133,7 +171,10 @@ final class CheckPredecessorAlgorithmSpec
 
       "finish successfully after sending a ResetPredecessor message to the Pointer actor" in {
         val pointersActor = newPointersActor
-        newAlgorithmActor(pointersActor) ! CheckPredecessorAlgorithmStart
+        val router = newRouter
+        val algorithm = newAlgorithmActor(router, pointersActor)
+
+        algorithm ! CheckPredecessorAlgorithmStart
         expectMsg(CheckPredecessorAlgorithmFinished)
         expectNoMessage(spuriousMessageDuration)
         pointersActor ! GetPredecessor
@@ -143,7 +184,10 @@ final class CheckPredecessorAlgorithmSpec
 
     "initialised with a Pointers actor that is unresponsive" should {
       "finish with an error" in {
-        newAlgorithmActor(unresponsiveActor) ! CheckPredecessorAlgorithmStart
+        val router = newRouter
+        val algorithm = newAlgorithmActor(router, unresponsiveActor)
+
+        algorithm ! CheckPredecessorAlgorithmStart
         expectMsgType[CheckPredecessorAlgorithmError]
         expectNoMessage(spuriousMessageDuration)
       }

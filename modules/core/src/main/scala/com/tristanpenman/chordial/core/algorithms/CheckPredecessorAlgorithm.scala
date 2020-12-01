@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.core.algorithms
 import akka.actor._
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Pointers._
+import com.tristanpenman.chordial.core.Router.Forward
 
 import scala.concurrent.duration.Duration
 
@@ -65,7 +66,7 @@ final class CheckPredecessorAlgorithm(router: ActorRef, pointersRef: ActorRef, r
 
     case GetPredecessorOk(predecessor) =>
       context.become(awaitGetSuccessor(replyTo))
-      predecessor.ref ! GetSuccessor
+      router ! Forward(predecessor.id, predecessor.addr, GetSuccessor)
 
     case GetPredecessorOkButUnknown =>
       context.become(receive)
