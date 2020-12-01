@@ -27,7 +27,8 @@ final class Node(nodeId: Long,
                  eventStream: EventStream,
                  router: ActorRef)
     extends Actor
-    with ActorLogging {
+    with ActorLogging
+    with Stash {
 
   import Node._
   import Pointers._
@@ -277,8 +278,10 @@ final class Node(nodeId: Long,
           newStabilisationCancellable
         ))
 
-    case m =>
-      log.warning("Unexpected message", m)
+      unstashAll()
+
+    case _ =>
+      stash()
   }
 }
 
