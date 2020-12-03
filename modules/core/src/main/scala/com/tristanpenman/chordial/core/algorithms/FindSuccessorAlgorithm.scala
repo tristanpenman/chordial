@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.core.algorithms
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.tristanpenman.chordial.core.Node.{FindPredecessor, FindPredecessorError, FindPredecessorOk}
 import com.tristanpenman.chordial.core.Pointers._
+import com.tristanpenman.chordial.core.Router.Forward
 import com.tristanpenman.chordial.core.shared.NodeInfo
 
 /**
@@ -37,7 +38,7 @@ final class FindSuccessorAlgorithm(router: ActorRef) extends Actor with ActorLog
 
   def awaitFindPredecessor(delegate: ActorRef): Receive = {
     case FindPredecessorOk(_, predecessor) =>
-      predecessor.ref ! GetSuccessor
+      router ! Forward(predecessor.id, predecessor.addr, GetSuccessor)
       context.become(awaitGetSuccessor(delegate))
 
     case FindPredecessorError(_, message) =>

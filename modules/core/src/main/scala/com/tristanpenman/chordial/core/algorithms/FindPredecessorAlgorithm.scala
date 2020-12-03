@@ -3,6 +3,7 @@ package com.tristanpenman.chordial.core.algorithms
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Pointers._
+import com.tristanpenman.chordial.core.Router.Forward
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 /**
@@ -37,7 +38,7 @@ final class FindPredecessorAlgorithm(router: ActorRef) extends Actor with ActorL
       } else {
         // Otherwise, we need to choose the next node by the asking the current candidate node to return what it knows
         // to be the closest preceding finger for the query ID
-        candidate.ref ! ClosestPrecedingNode(queryId)
+        router ! Forward(candidate.id, candidate.addr, ClosestPrecedingNode(queryId))
         context.become(awaitClosestPrecedingNode(queryId, delegate))
       }
 
@@ -52,7 +53,7 @@ final class FindPredecessorAlgorithm(router: ActorRef) extends Actor with ActorL
     case ClosestPrecedingNodeOk(candidate) =>
       // Now that we have the ID and ActorRef for the next candidate node, we can proceed to the next step of the
       // algorithm. This requires that we locate the successor of the candidate node.
-      candidate.ref ! GetSuccessor
+      router ! Forward(candidate.id, candidate.addr, GetSuccessor)
       context.become(awaitGetSuccessor(queryId, delegate, candidate))
 
     case ClosestPrecedingNodeError(message: String) =>

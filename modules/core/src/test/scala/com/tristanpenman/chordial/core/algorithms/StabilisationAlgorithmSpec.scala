@@ -1,7 +1,6 @@
 package com.tristanpenman.chordial.core.algorithms
 
 import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
@@ -9,7 +8,15 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node.{Notify, NotifyOk}
 import com.tristanpenman.chordial.core.{Pointers, Router}
 import com.tristanpenman.chordial.core.Pointers._
-import com.tristanpenman.chordial.core.Router.{Start, StartFailed, StartOk, StartResponse}
+import com.tristanpenman.chordial.core.Router.{
+  Register,
+  RegisterOk,
+  RegisterResponse,
+  Start,
+  StartFailed,
+  StartOk,
+  StartResponse
+}
 import com.tristanpenman.chordial.core.algorithms.StabilisationAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
 import org.scalatest.WordSpecLike
@@ -34,7 +41,9 @@ final class StabilisationAlgorithmSpec
 
   private val dummyAddr = new InetSocketAddress("0.0.0.0", 0)
 
-  private val router = {
+  private val dummyInfo = NodeInfo(1L, dummyAddr, self)
+
+  private def newRouter = {
     val routerRef = system.actorOf(Router.props(Map.empty))
 
     Await.result(
@@ -51,33 +60,49 @@ final class StabilisationAlgorithmSpec
     )
   }
 
+  private def registerNode(router: ActorRef, actorId: Long, actorRef: ActorRef): ActorRef =
+    Await.result(
+      router
+        .ask(Register(actorId, actorRef))(defaultTimeout)
+        .mapTo[RegisterResponse]
+        .map {
+          case RegisterOk(_) =>
+            actorRef
+          case _ =>
+            throw new Exception("Failed to register node")
+        },
+      Duration.Inf
+    )
+
+  def newAlgorithm(router: ActorRef, pointers: ActorRef): ActorRef = {
+    registerNode(
+      router,
+      1L,
+      TestActorRef(new Actor {
+        override def receive: Receive = {
+          case GetPredecessor =>
+            sender() ! GetPredecessorOk(dummyInfo)
+          case GetSuccessor =>
+            sender() ! GetSuccessorOk(dummyInfo)
+          case Notify(_, _, _) =>
+            sender() ! NotifyOk
+          case m =>
+            fail(s"Stub Node actor received an unexpected message of type: ${m.getClass})")
+        }
+      })
+    )
+
+    system.actorOf(StabilisationAlgorithm.props(router, dummyInfo, pointers, defaultTimeout))
+  }
+
   "A StabilisationAlgorithm actor" when {
-    "initialised with a Pointers actor for a node that is its own successor" should {
-      def newAlgorithm: ActorRef = {
-        val nodeRef = TestActorRef(new Actor {
-          override def receive: Receive = {
-            case GetPredecessor =>
-              sender() ! GetPredecessorOk(NodeInfo(1L, dummyAddr, self))
-            case GetSuccessor =>
-              sender() ! GetSuccessorOk(NodeInfo(1L, dummyAddr, self))
-            case Notify(_, _, _) =>
-              sender() ! NotifyOk
-            case m =>
-              fail(s"Stub Node actor received an unexpected message of type: ${m.getClass})")
-          }
-        })
-
-        val pointersRef = system.actorOf(
-          Pointers.props(1L, keyspaceBits, NodeInfo(1L, dummyAddr, nodeRef), system.eventStream)
-        )
-
-        system.actorOf(
-          StabilisationAlgorithm.props(router, NodeInfo(1L, dummyAddr, nodeRef), pointersRef, defaultTimeout)
-        )
-      }
-
+    "initialised with a node that is its own successor" should {
       "finish successfully without sending any further messages" in {
-        newAlgorithm ! StabilisationAlgorithmStart
+        val router = newRouter
+        val pointers = system.actorOf(Pointers.props(1L, keyspaceBits, dummyInfo, system.eventStream))
+        val algorithm = newAlgorithm(router, pointers)
+
+        algorithm ! StabilisationAlgorithmStart
         expectMsg(StabilisationAlgorithmFinished)
         expectNoMessage(spuriousMessageDuration)
       }

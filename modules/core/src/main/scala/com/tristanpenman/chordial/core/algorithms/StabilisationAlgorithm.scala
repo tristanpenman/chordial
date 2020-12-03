@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props, ReceiveTimeout}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Node._
 import com.tristanpenman.chordial.core.Pointers._
+import com.tristanpenman.chordial.core.Router.Forward
 import com.tristanpenman.chordial.core.shared.{Interval, NodeInfo}
 
 import scala.concurrent.duration.Duration
@@ -63,13 +64,13 @@ final class StabilisationAlgorithm(router: ActorRef, node: NodeInfo, pointersRef
       replyTo ! StabilisationAlgorithmError("Notify timed out")
   }
 
-  private def awaitUpdateSuccessor(replyTo: ActorRef, successor: ActorRef): Receive = {
+  private def awaitUpdateSuccessor(replyTo: ActorRef, successor: NodeInfo): Receive = {
     case StabilisationAlgorithmStart =>
       sender() ! StabilisationAlgorithmAlreadyRunning
 
     case UpdateSuccessorOk =>
       context.become(awaitNotify(replyTo))
-      successor ! Notify(node.id, node.addr, node.ref)
+      router ! Forward(successor.id, successor.addr, Notify(node.id, node.addr, node.ref))
 
     case ReceiveTimeout =>
       context.setReceiveTimeout(Duration.Undefined)
@@ -82,12 +83,12 @@ final class StabilisationAlgorithm(router: ActorRef, node: NodeInfo, pointersRef
       sender() ! StabilisationAlgorithmAlreadyRunning
 
     case GetPredecessorOk(candidate) if Interval(node.id + 1, successor.id).contains(candidate.id) =>
-      context.become(awaitUpdateSuccessor(replyTo, candidate.ref))
+      context.become(awaitUpdateSuccessor(replyTo, candidate))
       pointersRef ! UpdateSuccessor(candidate)
 
     case GetPredecessorOk(_) | GetPredecessorOkButUnknown =>
       context.become(awaitNotify(replyTo))
-      successor.ref ! Notify(node.id, node.addr, node.ref)
+      router ! Forward(successor.id, successor.addr, Notify(node.id, node.addr, node.ref))
 
     case ReceiveTimeout =>
       context.setReceiveTimeout(Duration.Undefined)
@@ -101,7 +102,7 @@ final class StabilisationAlgorithm(router: ActorRef, node: NodeInfo, pointersRef
 
     case GetSuccessorOk(primarySuccessor) =>
       context.become(awaitGetPredecessor(replyTo, primarySuccessor))
-      primarySuccessor.ref ! GetPredecessor
+      router ! Forward(primarySuccessor.id, primarySuccessor.addr, GetPredecessor)
 
     case ReceiveTimeout =>
       // TODO: Attempt to find new successor using finger table

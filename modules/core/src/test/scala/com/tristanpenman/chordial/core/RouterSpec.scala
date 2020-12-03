@@ -26,15 +26,16 @@ class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike wi
   private def startRouter(initialNodes: Map[Long, ActorRef]) = {
     val routerRef = system.actorOf(Router.props(initialNodes))
 
-    Await.result(routerRef
-      .ask(Start("0.0.0.0", 0))(defaultTimeout)
-      .mapTo[StartResponse]
-      .map {
-        case StartOk(_) =>
-          routerRef
-        case StartFailed(reason) =>
-          throw new Exception(s"Failed to start Router: ${reason}")
-      },
+    Await.result(
+      routerRef
+        .ask(Start("0.0.0.0", 0))(defaultTimeout)
+        .mapTo[StartResponse]
+        .map {
+          case StartOk(_) =>
+            routerRef
+          case StartFailed(reason) =>
+            throw new Exception(s"Failed to start Router: ${reason}")
+        },
       Duration.Inf
     )
   }

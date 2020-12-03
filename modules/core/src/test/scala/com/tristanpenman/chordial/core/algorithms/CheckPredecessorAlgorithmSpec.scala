@@ -56,7 +56,7 @@ final class CheckPredecessorAlgorithmSpec
     )
   }
 
-  def registerNode(router: ActorRef, actorId: Long, actorRef: ActorRef): ActorRef =
+  private def registerNode(router: ActorRef, actorId: Long, actorRef: ActorRef): ActorRef =
     Await.result(
       router
         .ask(Register(actorId, actorRef))(defaultTimeout)
