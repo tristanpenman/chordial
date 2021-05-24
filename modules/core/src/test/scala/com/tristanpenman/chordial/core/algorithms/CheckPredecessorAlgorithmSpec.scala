@@ -19,14 +19,14 @@ import com.tristanpenman.chordial.core.Router.{
 }
 import com.tristanpenman.chordial.core.algorithms.CheckPredecessorAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
-import org.scalatest.WordSpecLike
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
+import org.scalatest.wordspec.AnyWordSpecLike
 
 final class CheckPredecessorAlgorithmSpec
     extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with ImplicitSender {
 
   implicit val ec: ExecutionContextExecutor = system.dispatcher

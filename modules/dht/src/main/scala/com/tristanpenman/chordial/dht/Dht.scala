@@ -125,7 +125,7 @@ object Dht extends App with DefaultJsonProtocol {
     }
   }
 
-  Http().bindAndHandle(route, httpInterface, httpPort)
+  Http().newServerAt(httpInterface, httpPort).bindFlow(route)
 
   Await.result(system.whenTerminated, Duration.Inf)
 }

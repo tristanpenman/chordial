@@ -1,21 +1,20 @@
 package com.tristanpenman.chordial.core
 
-import java.net.InetSocketAddress
-
 import akka.actor.{Actor, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
 import com.tristanpenman.chordial.core.Pointers._
 import com.tristanpenman.chordial.core.shared.NodeInfo
-import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.wordspec.AnyWordSpecLike
 
+import java.net.InetSocketAddress
 import scala.concurrent.duration._
 
 final class PointersSpec
     extends TestKit(ActorSystem("PointersSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with ImplicitSender
     with ScalaFutures {
 

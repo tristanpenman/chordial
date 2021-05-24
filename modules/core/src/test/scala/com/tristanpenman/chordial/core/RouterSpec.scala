@@ -8,12 +8,12 @@ import akka.pattern.ask
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import akka.util.{ByteString, Timeout}
-import org.scalatest.WordSpecLike
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with WordSpecLike with ImplicitSender {
+class RouterSpec extends TestKit(ActorSystem("RouterSpec")) with AnyWordSpecLike with ImplicitSender {
   import Router._
 
   implicit val ec: ExecutionContextExecutor = system.dispatcher

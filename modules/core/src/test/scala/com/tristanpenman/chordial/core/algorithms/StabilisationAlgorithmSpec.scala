@@ -19,14 +19,14 @@ import com.tristanpenman.chordial.core.Router.{
 }
 import com.tristanpenman.chordial.core.algorithms.StabilisationAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
-import org.scalatest.WordSpecLike
 
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration._
+import org.scalatest.wordspec.AnyWordSpecLike
 
 final class StabilisationAlgorithmSpec
     extends TestKit(ActorSystem("StabilisationAlgorithmSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with ImplicitSender {
 
   implicit val ec: ExecutionContextExecutor = system.dispatcher

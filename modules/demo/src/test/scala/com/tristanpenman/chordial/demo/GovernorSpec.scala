@@ -1,15 +1,14 @@
 package com.tristanpenman.chordial.demo
 
-import java.net.InetSocketAddress
-
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{ImplicitSender, TestKit}
 import com.tristanpenman.chordial.demo.Governor._
-import org.scalatest._
+import org.scalatest.wordspec.AnyWordSpecLike
 
+import java.net.InetSocketAddress
 import scala.concurrent.duration._
 
-final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with WordSpecLike with ImplicitSender {
+final class GovernorSpec extends TestKit(ActorSystem("GovernorSpec")) with AnyWordSpecLike with ImplicitSender {
 
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds

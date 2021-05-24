@@ -8,14 +8,14 @@ import akka.util.Timeout
 import com.tristanpenman.chordial.core.Pointers.{GetSuccessor, GetSuccessorOk}
 import com.tristanpenman.chordial.core.algorithms.ClosestPrecedingNodeAlgorithm._
 import com.tristanpenman.chordial.core.shared.NodeInfo
-import org.scalatest.WordSpecLike
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration._
+import org.scalatest.wordspec.AnyWordSpecLike
 
 final class ClosestPrecedingNodeAlgorithmSpec
     extends TestKit(ActorSystem("CheckPredecessorAlgorithmSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with ImplicitSender {
 
   // Timeout for requests performed within CheckPredecessorAlgorithm actor

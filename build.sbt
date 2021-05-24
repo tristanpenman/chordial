@@ -29,7 +29,8 @@ lazy val commonSettings = Seq(
 )
 
 lazy val akkaVersion = "2.5.32"
-lazy val akkaHttpVersion = "10.1.12"
+lazy val akkaHttpCorsVersion = "1.1.1"
+lazy val akkaHttpVersion = "10.2.2"
 lazy val guavaVersion = "29.0-jre"
 lazy val scalatestVersion = "3.1.2"
 
@@ -50,7 +51,7 @@ lazy val demo = project
   .settings(commonSettings: _*)
   .settings(
     libraryDependencies ++= Seq(
-      "ch.megard" %% "akka-http-cors" % "0.4.3",
+      "ch.megard" %% "akka-http-cors" % akkaHttpCorsVersion,
       "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-remote" % akkaVersion,
@@ -67,7 +68,7 @@ lazy val dht = project
   .settings(commonSettings: _*)
   .settings(
     libraryDependencies ++= Seq(
-      "ch.megard" %% "akka-http-cors" % "0.4.3",
+      "ch.megard" %% "akka-http-cors" % akkaHttpCorsVersion,
       "com.google.guava" % "guava" % guavaVersion,
       "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
       "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,

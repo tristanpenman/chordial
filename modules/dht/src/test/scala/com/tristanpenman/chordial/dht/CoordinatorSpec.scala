@@ -2,11 +2,11 @@ package com.tristanpenman.chordial.dht
 
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
-import org.scalatest._
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.duration.DurationInt
 
-final class CoordinatorSpec extends TestKit(ActorSystem("CoordinatorSpec")) with WordSpecLike with ImplicitSender {
+final class CoordinatorSpec extends TestKit(ActorSystem("CoordinatorSpec")) with AnyWordSpecLike with ImplicitSender {
 
   // Time to wait before concluding that no additional messages will be received
   private val spuriousMessageDuration = 150.milliseconds

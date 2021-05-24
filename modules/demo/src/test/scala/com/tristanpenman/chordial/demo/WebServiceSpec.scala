@@ -1,19 +1,20 @@
 package com.tristanpenman.chordial.demo
 
 import akka.actor.{Actor, ActorRef, ActorSystem}
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.TestActorRef
 import com.tristanpenman.chordial.demo.Governor._
-import org.scalatest.WordSpec
-import org.scalatest.Matchers._
-import akka.http.scaladsl.model.StatusCodes
+import org.scalatest.wordspec.AnyWordSpec
 import spray.json._
-import akka.http.scaladsl.testkit.ScalatestRouteTest
 
-final class WebServiceSpec extends WordSpec with ScalatestRouteTest with WebService {
+import scala.concurrent.ExecutionContextExecutor
+
+final class WebServiceSpec extends AnyWordSpec with ScalatestRouteTest with WebService {
 
   import WebService._
 
-  override implicit val ec = system.dispatcher
+  override implicit val ec: ExecutionContextExecutor = system.dispatcher
 
   def actorRefFactory: ActorSystem = system
 
