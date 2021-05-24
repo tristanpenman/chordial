@@ -1,11 +1,11 @@
-name := "Chordial"
+name := "chordial"
 
 lazy val commonSettings = Seq(
   organization := "com.tristanpenman",
   version := "0.0.1",
-  scalafmtOnCompile in ThisBuild := true,
-  scalafmtVersion in ThisBuild := "1.4.0",
-  scalaVersion := "2.13.2",
+  ThisBuild / scalafmtOnCompile := true,
+  ThisBuild / scalafmtVersion := "1.4.0",
+  ThisBuild / scalaVersion := "2.13.6",
   resolvers ++= Seq(
     "Typesafe Releases" at "https://repo.typesafe.com/typesafe/maven-releases/",
     Resolver.jcenterRepo,
@@ -24,14 +24,14 @@ lazy val commonSettings = Seq(
     "-Ywarn-unused:_"
   ),
   // Work-around for metaspace OOM issues that occur with Scala 2.12.8 and sbt 1.3.0-RC1
-  fork in Test := true,
-  javaOptions in Test ++= Seq("-Xmx256m")
+  Test / fork := true,
+  Test / javaOptions ++= Seq("-Xmx256m")
 )
 
-lazy val akkaVersion = "2.5.31"
+lazy val akkaVersion = "2.5.32"
 lazy val akkaHttpVersion = "10.1.12"
 lazy val guavaVersion = "29.0-jre"
-lazy val scalatestVersion = "3.0.8"
+lazy val scalatestVersion = "3.1.2"
 
 lazy val core = project
   .in(file("modules/core"))
