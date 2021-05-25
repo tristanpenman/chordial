@@ -1,0 +1,27 @@
+body {
+  text-align: center;
+}
+
+svg {
+  border: 1px solid #ccc;
+  padding: 20px;
+}
+
+path.arc.ring {
+  fill: #fff;
+  stroke: #aaa;
+}
+
+path.arc.node {
+  fill: #fff;
+  stroke: #333;
+}
+
+path.arc.node.inactive {
+  fill: #f00;
+}
+
+path.chord {
+  fill: none;
+  stroke: #336699;
+}
