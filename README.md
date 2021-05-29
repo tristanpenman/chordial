@@ -36,6 +36,10 @@ Although this demo allows you to create multiple independent Chord networks, you
 
     curl -XPOST -w"\n" http://127.0.0.1:4567/nodes?seed_id=6
 
+After several node insertions, you will end up with a visualisation similar to this:
+
+![Chord visualisation](./doc/visualisation.png)
+
 This would return a JSON representation of the new node, such as:
 
     {"nodeId":6,"successorId":59,"active":true}
