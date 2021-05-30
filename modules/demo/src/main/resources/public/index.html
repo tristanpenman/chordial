@@ -21,7 +21,9 @@
   <!-- vue components -->
   <script>
     [
-      'chord-ring'
+      'application-view',
+      'chord-ring',
+      'control-panel'
     ].forEach((component) => {
       Vue.component(component, httpVueLoader(`js/components/${component}.vue`));
     });

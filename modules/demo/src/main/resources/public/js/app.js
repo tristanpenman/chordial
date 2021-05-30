@@ -8,7 +8,7 @@ window.onload = function () {
   new Vue({
     el: document.getElementById('app'),
     template: `
-      <chord-ring></chord-ring>
+      <application-view></application-view>
     `
   });
 };

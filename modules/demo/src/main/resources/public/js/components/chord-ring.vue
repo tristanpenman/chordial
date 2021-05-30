@@ -16,14 +16,7 @@ module.exports = {
     const keyspaceModulus = 64;
     const keyspaceFactor = 360 / keyspaceModulus;
 
-    // Chrome 15 bug: <http://code.google.com/p/chromium/issues/detail?id=98951>
-    const div = d3.select(this.$refs.el).append("div")
-        .style("width", w + "px")
-        .style("height", w + "px")
-        .style("margin", "0 auto")
-        .style("-webkit-backface-visibility", "hidden");
-
-    const svg = div.append("svg:svg")
+    const svg = d3.select(this.$refs.el).append("svg:svg")
         .attr("width", w)
         .attr("height", w)
         .append("svg:g")
@@ -147,5 +140,30 @@ module.exports = {
 <style>
 .ChordRing {
   background: #fff;
+  padding: 20px;
+}
+
+.ChordRing > svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.ChordRing > svg > g > path.ring {
+  fill: #fff;
+  stroke: #aaa;
+}
+
+.ChordRing > svg > g > path.node {
+  fill: #fff;
+  stroke: #333;
+}
+
+.ChordRing > svg > g > path.node.inactive {
+  fill: #f00;
+}
+
+.ChordRing > svg > g > path.chord {
+  fill: none;
+  stroke: #336699;
 }
 </style>
