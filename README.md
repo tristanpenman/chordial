@@ -22,7 +22,7 @@ To start the demo server using SBT:
 
     sbt "demo/runMain com.tristanpenman.chordial.demo.Demo"
 
-Once the server has started, the browser-based interface should be accessible via [http://127.0.0.1:4567/eventstream/websocket.html](http://127.0.0.1:4567/eventstream/websocket.html). This page opens a WebSocket connection to the server, and will be updated with nodes and lines representing their successor relationships as they are added to the network. 
+Once the server has started, the browser-based interface should be accessible via [http://127.0.0.1:4567](http://127.0.0.1:4567). This page opens a WebSocket connection to the server, and will be updated with nodes and lines representing their successor relationships as they are added to the network. 
 
 Nodes can be created via POST requests to the `http://127.0.0.1:4567/nodes` endpoint. A new node could be created using cURL:
 

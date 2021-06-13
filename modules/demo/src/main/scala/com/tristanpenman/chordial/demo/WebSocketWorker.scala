@@ -15,11 +15,13 @@ final class WebSocketWorker(governor: ActorRef, eventsSource: Source[TextMessage
   def route: Route =
     cors() {
       routes(governor) ~
-        pathPrefix("eventstream")(
-          getFromDirectory("modules/demo/src/main/resources/public") ~
-            getFromResourceDirectory("public")
-        ) ~
-        handleWebSocketMessages(Flow[Message].take(0).prepend(eventsSource))
+        pathEndOrSingleSlash {
+          handleWebSocketMessages(Flow[Message].take(0).prepend(eventsSource)) ~
+            getFromFile("modules/demo/src/main/resources/public/index.html") ~
+            getFromResource("public/index.html")
+        } ~
+        getFromDirectory("modules/demo/src/main/resources/public") ~
+        getFromResourceDirectory("public")
     }
 }
 

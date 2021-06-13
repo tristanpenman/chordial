@@ -5,7 +5,7 @@
 <script>
 module.exports = {
   mounted() {
-    const wsUri = "ws://127.0.0.1:4567/";
+    const wsUri = "ws://127.0.0.1:4567";
     const nodesUri = "http://127.0.0.1:4567/nodes";
     const w = 600;
     const h = 600;
