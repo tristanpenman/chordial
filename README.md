@@ -10,7 +10,7 @@ This repo currently contains the following modules:
 
 * _core_ - core classes and algorithms that make up the Chord implementation
 * _demo_ - a simple websocket-based demo, which allows a Chord network to be visualised on a ring
-* _dht_ - a minimal DHT based on the classes provided by _core_
+* _dht_ - a minimal Distributed Hash Table (DHT) based on the classes provided by _core_
 
 ### Core
 
